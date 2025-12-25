@@ -1,0 +1,392 @@
+# =============================================================================
+# KUBERNETES DEPLOYMENT - PRODUCTION-GRADE WITH SECURITY HARDENING
+# =============================================================================
+# Standards:
+# - NSA/CISA Kubernetes Hardening Guidance
+# - CIS Kubernetes Benchmark 1.6.0
+# - Pod Security Standards (v1.0)
+# - Kubernetes Security Best Practices 2024
+# =============================================================================
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: myapp-production
+  labels:
+    name: production
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: myapp-config
+  namespace: myapp-production
+data:
+  NODE_ENV: "production"
+  PORT: "3000"
+  HOSTNAME: "0.0.0.0"
+  NODE_OPTIONS: "--max-old-space-size=2048"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: myapp-secrets
+  namespace: myapp-production
+type: Opaque
+stringData:
+  # NEVER commit actual secrets to Git
+  # Use: kubectl create secret generic myapp-secrets --from-literal=API_KEY=xxx
+  DATABASE_URL: "placeholder"
+  API_KEY: "placeholder"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+  namespace: myapp-production
+  labels:
+    app: myapp
+    version: "1.0.0"
+    environment: production
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: myapp
+  template:
+    metadata:
+      labels:
+        app: myapp
+        version: "1.0.0"
+      annotations:
+        # ✅ Seccomp profile (CIS Benchmark 5.7.3)
+        seccomp.security.alpha.kubernetes.io/pod: "runtime/default"
+        # ✅ Scheduler hints
+        scheduler.alpha.kubernetes.io/critical-pod: "true"
+    spec:
+      # ✅ Service Account (minimize permissions)
+      serviceAccountName: myapp-sa
+
+      # ✅ Security Context (Pod-level)
+      securityContext:
+        # ✅ Run as non-root user (CIS Benchmark 5.7.3)
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+
+        # ✅ Read-only root filesystem (CIS Benchmark 5.7.4)
+        fsGroupChangePolicy: "OnRootMismatch"
+
+        # ✅ Seccomp profile
+        seccompProfile:
+          type: RuntimeDefault
+
+        # ✅ No privilege escalation
+        allowPrivilegeEscalation: false
+
+      # ✅ Container Security Context
+      containers:
+      - name: myapp
+        image: myapp:1.0.0
+        imagePullPolicy: IfNotPresent
+
+        # ✅ Container security context
+        securityContext:
+          # ✅ Drop ALL capabilities (CIS Benchmark 5.7.1)
+          capabilities:
+            drop:
+            - ALL
+            # Add back only what's needed
+            add:
+            - NET_BIND_SERVICE  # For binding to port < 1024
+
+          # ✅ No privilege escalation (CIS Benchmark 5.7.2)
+          allowPrivilegeEscalation: false
+
+          # ✅ Read-only root filesystem (CIS Benchmark 5.7.4)
+          readOnlyRootFilesystem: true
+
+          # ✅ Run as non-root
+          runAsNonRoot: true
+          runAsUser: 1001
+
+        # ✅ Environment variables
+        envFrom:
+        - configMapRef:
+            name: myapp-config
+        - secretRef:
+            name: myapp-secrets
+
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+
+        # ✅ Ports
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+
+        # ✅ Resource limits (CIS Benchmark 5.7.5)
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+        # ✅ Liveness probe (CIS Benchmark 5.7.6)
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+
+        # ✅ Readiness probe (CIS Benchmark 5.7.6)
+        readinessProbe:
+          httpGet:
+            path: /api/ready
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+
+        # ✅ Startup probe (for slow-starting containers)
+        startupProbe:
+          httpGet:
+            path: /api/health
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 0
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 30
+
+        # ✅ Volume mounts (for read-only filesystem)
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: cache
+          mountPath: /app/.next/cache
+
+        # ✅ Lifecycle hooks
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 5"]  # Wait for load balancer removal
+
+      # ✅ Volumes
+      volumes:
+      # ✅ ephemeral storage (emptyDir)
+      - name: tmp
+        emptyDir: {}
+      - name: cache
+        emptyDir: {}
+
+      # ✅ Image pull secrets (for private registries)
+      imagePullSecrets:
+      - name: registry-credentials
+
+      # ✅ Node affinity (for better distribution)
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - myapp
+              topologyKey: kubernetes.io/hostname
+
+      # ✅ Tolerations (control placement)
+      tolerations:
+      - key: "dedicated"
+        operator: "Equal"
+        value: "myapp"
+        effect: "NoSchedule"
+
+      # ✅ Priority class (critical pods)
+      priorityClassName: high-priority
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp
+  namespace: myapp-production
+  labels:
+    app: myapp
+  annotations:
+    # ✅ Cloud provider annotations
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+spec:
+  type: ClusterIP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP
+  selector:
+    app: myapp
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: myapp-sa
+  namespace: myapp-production
+  annotations:
+    # ✅ Workload identity (AWS/GCP/Azure)
+    eks.amazonaws.com/role-arn: "arn:aws:iam::ACCOUNT_ID:role/myapp-role"
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: myapp-pdb
+  namespace: myapp-production
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: myapp
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: myapp-hpa
+  namespace: myapp-production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: myapp
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 2
+        periodSeconds: 15
+      selectPolicy: Max
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: myapp-netpol
+  namespace: myapp-production
+spec:
+  podSelector:
+    matchLabels:
+      app: myapp
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 3000
+  egress:
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 53  # DNS
+    - protocol: UDP
+      port: 53  # DNS
+  - to:
+    - podSelector:
+        matchLabels:
+          app: database
+    ports:
+    - protocol: TCP
+      port: 5432
+
+---
+# =============================================================================
+# USAGE
+# =============================================================================
+# # Apply to cluster
+# kubectl apply -f kubernetes-security.yaml
+#
+# # Verify deployment
+# kubectl get pods -n myapp-production
+# kubectl get svc -n myapp-production
+#
+# # Check security context
+# kubectl get pod -l app=myapp -n myapp-production -o yaml | grep -A 20 securityContext
+#
+# # View logs
+# kubectl logs -l app=myapp -n myapp-production --tail=100 -f
+#
+# # Port forward for testing
+# kubectl port-forward -n myapp-production deployment/myapp 3000:3000
+# =============================================================================

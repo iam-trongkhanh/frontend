@@ -1,0 +1,152 @@
+# =============================================================================
+# APPARMOR PROFILE - Node.js Application Security
+# =============================================================================
+# Purpose: Mandatory Access Control (MAC) for container
+# Standard: AppArmor 3.x, CIS Docker Benchmark 5.2
+# Usage:
+#   1. Load profile: sudo apparmor_parser -r apparmor-profile
+#   2. Verify: aa-status
+#   3. Use in docker: --security-opt "apparmor=myapp-profile"
+# =============================================================================
+
+#include <tunables/global>
+
+profile myapp-profile flags=(attach_disconnected,mediate_deleted) {
+  # =============================================================================
+  # CAPABILITIES (Minimal)
+  # =============================================================================
+  capability net_bind_service,
+  capability setuid,
+  capability setgid,
+  capability chown,
+  capability dac_override,
+
+  # =============================================================================
+  # NETWORK ACCESS
+  # =============================================================================
+  network inet stream,
+  network inet6 stream,
+  network inet dgram,
+  network inet6 dgram,
+
+  # Allow binding to port 3000
+  # Allow localhost connections
+  # Allow DNS queries
+
+  # =============================================================================
+  # FILESYSTEM ACCESS (Read-Only except specific dirs)
+  # =============================================================================
+
+  # Application directory (read-only)
+  /app/** r,
+  /app/.next/** r,
+  /app/node_modules/** r,
+  /app/public/** r,
+  /app/package.json r,
+  /app/package-lock.json r,
+
+  # Temp directory (read-write)
+  /tmp/** rw,
+  /tmp/ rw,
+
+  # Proc filesystem (read-only, specific files)
+  /proc/[0-9]*/status r,
+  /proc/sys/kernel/hostname r,
+  /proc/meminfo r,
+  /proc/cpuinfo r,
+
+  # Deny sensitive proc files
+  deny /proc/[0-9]*/cmdline r,
+  deny /proc/[0-9]*/environ r,
+  deny /proc/[0-9]*/io r,
+  deny /proc/[0-9]*/map_files/** r,
+  deny /proc/kcore r,
+  deny /proc/kallsyms r,
+  deny /proc/sys/** rw,
+
+  # System libraries (read-only)
+  /lib/** r,
+  /lib64/** r,
+  /usr/lib/** r,
+  /usr/lib64/** r,
+  /usr/local/lib/** r,
+  /usr/local/lib64/** r,
+
+  # Node.js executable
+  /usr/local/bin/node mr,
+  /usr/bin/node mr,
+
+  # CA certificates (for HTTPS)
+  /etc/ssl/certs/** r,
+  /etc/ssl/certs/ r,
+  /etc/ca-certificates/** r,
+
+  # Timezone data
+  /usr/share/zoneinfo/** r,
+  /etc/localtime r,
+  /etc/timezone r,
+
+  # =============================================================================
+  # DENY RULES (Security Hardening)
+  # =============================================================================
+
+  # No shell access
+  deny /bin/** ix,
+  deny /usr/bin/** ix,
+  deny /sbin/** ix,
+  deny /usr/sbin/** ix,
+  deny /usr/local/bin/** ix,
+
+  # No package manager access
+  deny /usr/bin/apt** ix,
+  deny /usr/bin/yum ix,
+  deny /usr/bin/pacman ix,
+  deny /usr/bin/apk ix,
+
+  # No write to system directories
+  deny /etc/** w,
+  deny /usr/** w,
+  deny /bin/** w,
+  deny /sbin/** w,
+  deny /lib/** w,
+  deny /lib64/** w,
+
+  # No access to Docker socket
+  deny /var/run/docker.sock rw,
+  deny /var/run/docker.sock/** rw,
+
+  # No access to user data
+  deny /home/** rw,
+  deny /root/** rw,
+
+  # =============================================================================
+  # SIGNAL HANDLING
+  # =============================================================================
+  signal (receive) set=(term, kill) peer=unconfined,
+  signal (receive) set=(term, kill) peer=myapp-profile,
+
+  # =============================================================================
+  # PTRACE/DEBUGGING (Deny for security)
+  # =============================================================================
+  deny ptrace (read, tracedby),
+  deny ptrace (trace, tracedby),
+
+  # =============================================================================
+  # MOUNT/UMOUNT (Block completely)
+  # =============================================================================
+  deny mount,
+  deny umount,
+
+  # =============================================================================
+  # MODULES (Block kernel module loading)
+  # =============================================================================
+  deny /sys/module/** w,
+
+  # =============================================================================
+  # LOGGING
+  # =============================================================================
+  # Log denied attempts (for security monitoring)
+  audit deny /root/** rw,
+  audit deny /etc/shadow r,
+  audit deny /etc/passwd w,
+}

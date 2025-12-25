@@ -1,0 +1,1560 @@
+// =============================================================================
+// LEARN JENKINSFILE - COMPLETE GUIDE FROM ZERO TO EXPERT (2025)
+// =============================================================================
+// Hướng dẫn đầy đủ CI/CD với Jenkins Pipeline
+// Mỗi section giải thích từ cơ bản đến expert level
+// =============================================================================
+
+// =============================================================================
+// SECTION 1: BASIC PIPELINE DECLARATION
+// =============================================================================
+// Jenkins supports 2 pipeline syntaxes:
+// 1. Declarative Pipeline (Recommended 90% use cases)
+// 2. Scripted Pipeline (For complex logic)
+
+// Basic structure:
+pipeline {
+    agent any
+    stages {
+        stage('Build') {
+            steps {
+                echo 'Building...'
+            }
+        }
+    }
+}
+
+// =============================================================================
+// SECTION 2: COMPLETE PIPELINE BLOCK WITH ALL OPTIONS
+// =============================================================================
+
+pipeline {
+    // -------------------------------------------------------------------------
+    // AGENT - Where pipeline runs
+    // -------------------------------------------------------------------------
+
+    // Option 1: Any available agent
+    agent any
+
+    // Option 2: None - each stage defines own agent
+    // agent none
+
+    // Option 3: Specific label
+    // agent { label 'linux' }
+
+    // Option 4: Docker agent
+    // agent {
+    //     docker {
+    //         image 'node:20-alpine'
+    //         args '-v $HOME/.cache:/root/.cache'
+    //     }
+    // }
+
+    // Option 5: Kubernetes agent (for Kubernetes pods)
+    // agent {
+    //     kubernetes {
+    //         label 'my-pod'
+    //         yaml '''
+    //             apiVersion: v1
+    //             kind: Pod
+    //             spec:
+    //               containers:
+    //               - name: node
+    //                 image: node:20-alpine
+    //                 command:
+    //                 - cat
+    //                 tty: true
+    //         '''
+    //     }
+    // }
+
+    // -------------------------------------------------------------------------
+    // OPTIONS - Pipeline-wide options
+    // -------------------------------------------------------------------------
+    options {
+        // Timeout entire pipeline
+        timeout(time: 1, unit: 'HOURS')
+
+        // Add timestamps to console output
+        timestamps()
+
+        // Disable concurrent builds
+        disableConcurrentBuilds()
+
+        // Skip default checkout
+        skipDefaultCheckout(true)
+
+        // Keep last 10 builds
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+
+        // Skip stages after unstable
+        skipStagesAfterUnstable()
+
+        // Throttle builds (max 1 per hour)
+        // throttleJobProperty(
+        //     categories: ['limit'],
+        //     limitOneJobWithMatchingParams: true,
+        //     throttleEnabled: true,
+        //     throttleOption: 'project'
+        // )
+
+        // Checkout to subdirectory
+        // skipDefaultCheckout()
+        // checkoutToSubdirectory('source')
+
+        // Quiet period (wait N seconds before build)
+        // quietPeriod(30)
+
+        // Retry entire pipeline
+        // retry(3)
+
+        // Rate limiting
+        // rateLimitBuilds(throttle: [count: 1, durationName: 'hour'])
+    }
+
+    // -------------------------------------------------------------------------
+    // PARAMETERS - Build-time input
+    // -------------------------------------------------------------------------
+    parameters {
+        // String parameter
+        string(
+            name: 'VERSION',
+            defaultValue: '1.0.0',
+            description: 'Release version',
+            trim: true
+        )
+
+        // Choice parameter
+        choice(
+            name: 'ENVIRONMENT',
+            choices: ['dev', 'staging', 'production'],
+            description: 'Deployment environment'
+        )
+
+        // Boolean parameter
+        booleanParam(
+            name: 'RUN_TESTS',
+            defaultValue: true,
+            description: 'Run automated tests'
+        )
+
+        // Boolean parameter with default false
+        booleanParam(
+            name: 'FORCE_DEPLOY',
+            defaultValue: false,
+            description: 'Force deployment even if tests fail'
+        )
+
+        // Text parameter (multiline)
+        text(
+            name: 'RELEASE_NOTES',
+            defaultValue: '',
+            description: 'Release notes (markdown format)'
+        )
+
+        // Password parameter (masked)
+        password(
+            name: 'API_TOKEN',
+            defaultValue: '',
+            description: 'API token for deployment (masked)'
+        )
+
+        // File parameter
+        // file(
+        //     name: 'CONFIG_FILE',
+        //     description: 'Upload configuration file'
+        // )
+
+        // Run parameter (trigger another job)
+        // run(
+        //     name: 'DOWNSTREAM_JOB',
+        //     projectName: 'dependency-job',
+        //     description: 'Trigger dependency job',
+        //     passAllParameters: true
+        // )
+    }
+
+    // -------------------------------------------------------------------------
+    // TRIGGERS - Auto-trigger builds
+    // -------------------------------------------------------------------------
+    // triggers {
+    //     // Poll SCM every 5 minutes
+    //     pollSCM('H/5 * * * *')
+
+    //     // Cron schedule (every day at 2 AM)
+    //     cron('0 2 * * *')
+
+    //     // Trigger on upstream job completion
+    //     upstream(upstreamProjects: 'dependency-job', threshold: 'SUCCESS')
+
+    //     // Trigger on GitHub push
+    //     githubPush()
+
+    //     // Trigger on GitLab merge request
+    //     gitlab(
+    //         triggerOnMergeRequest: true,
+    //         branchFilterType: 'NameBasedFilter',
+    //         includeBranches: 'main,develop'
+    //     )
+
+    //     // Periodic (every day at 2 AM plus every 4 hours)
+    //     periodic(cron: '0 2 * * *', interval: '4h')
+    // }
+
+    // -------------------------------------------------------------------------
+    // ENVIRONMENT - Global environment variables
+    // -------------------------------------------------------------------------
+    environment {
+        // Static values
+        PROJECT_NAME = 'my-application'
+        NODE_ENV = 'production'
+        BUILD_TIMESTAMP = sh(script: 'date -u +"%Y%m%d_%H%M%S"', returnStdout: true).trim()
+
+        // From parameters
+        DEPLOY_ENV = "${params.ENVIRONMENT}"
+
+        // Paths
+        WORKSPACE_ROOT = "${env.WORKSPACE}"
+        BUILD_DIR = "${env.WORKSPACE}/build"
+        REPORTS_DIR = "${env.WORKSPACE}/reports"
+
+        // Tool versions
+        NODE_VERSION = '20'
+        NPM_VERSION = '10'
+
+        // Maven (if needed)
+        // MAVEN_OPTS = '-Xmx2048m'
+        // MAVEN goals = 'clean package'
+
+        // Git info (will be set dynamically)
+        GIT_COMMIT_SHORT = ''
+        GIT_BRANCH_NAME = ''
+
+        // Docker
+        // DOCKER_REGISTRY = 'myregistry.com'
+        // DOCKER_IMAGE = "${DOCKER_REGISTRY}/${PROJECT_NAME}"
+        // DOCKER_TAG = "${VERSION}-${BUILD_TIMESTAMP}"
+    }
+
+    // -------------------------------------------------------------------------
+    // TOOLS - Auto-install tools
+    // -------------------------------------------------------------------------
+    tools {
+        // Maven (Must configure in Jenkins Global Tool Configuration)
+        // maven 'Maven-3.9'
+
+        // Node.js (Need Node.js plugin)
+        // nodejs 'Node-20'
+
+        // JDK
+        // jdk 'JDK-17'
+
+        // Gradle
+        // gradle 'Gradle-8'
+
+        // Go
+        // go 'Go-1.21'
+    }
+
+    // -------------------------------------------------------------------------
+    // LIBRARIES - Shared libraries
+    // -------------------------------------------------------------------------
+    // @Library('shared-library@main') _
+    // @Library('my-shared-lib') import com.example.MyUtils
+
+    // -------------------------------------------------------------------------
+    // STAGES - Main pipeline stages
+    // -------------------------------------------------------------------------
+    stages {
+        // ======================================================================
+        // STAGE 1: INITIALIZATION
+        // ======================================================================
+        stage('Initialization') {
+            steps {
+                script {
+                    echo '=================================='
+                    echo '  PIPELINE INITIALIZATION'
+                    echo '=================================='
+                    echo "Project: ${env.PROJECT_NAME}"
+                    echo "Environment: ${params.ENVIRONMENT}"
+                    echo "Version: ${params.VERSION}"
+                    echo "Build Number: ${env.BUILD_NUMBER}"
+                    echo "Build URL: ${env.BUILD_URL}"
+                    echo "Workspace: ${env.WORKSPACE}"
+                    echo "Node: ${env.NODE_NAME}"
+                    echo "=================================="
+
+                    // Set Git info dynamically
+                    env.GIT_COMMIT_SHORT = sh(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    env.GIT_BRANCH_NAME = sh(
+                        script: 'git rev-parse --abbrev-ref HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Git Commit: ${env.GIT_COMMIT_SHORT}"
+                    echo "Git Branch: ${env.GIT_BRANCH_NAME}"
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 2: CHECKOUT
+        // ======================================================================
+        stage('Checkout') {
+            steps {
+                echo 'Checking out source code...'
+
+                // Option 1: Checkout from SCM (Git)
+                checkout scm
+
+                // Option 2: Custom git checkout
+                // git url: 'https://github.com/username/repo.git', branch: 'main'
+
+                // Option 3: Multiple repositories
+                // dir('submodule') {
+                //     git url: 'https://github.com/username/submodule.git'
+                // }
+
+                // Option 4: Sparse checkout (only specific files)
+                // checkout([
+                //     $class: 'GitSCM',
+                //     branches: [[name: '*/main']],
+                //     userRemoteConfigs: [[url: 'https://github.com/username/repo.git']],
+                //     extensions: [
+                //         [$class: 'SparseCheckoutPaths',
+        //          sparseCheckoutPaths: [[path: 'src'], [path: 'package.json']]]
+                //     ]
+                // ])
+
+                // Show git info
+                sh '''
+                    echo "=== Git Info ==="
+                    git log -1 --pretty=format:"Commit: %h%nAuthor: %an%nDate: %ad%nMessage: %s%n"
+                    git branch -a
+                    git remote -v
+                    echo "==============="
+                '''
+            }
+        }
+
+        // ======================================================================
+        // STAGE 3: SETUP - Install dependencies
+        // ======================================================================
+        stage('Setup') {
+            steps {
+                echo 'Setting up build environment...'
+
+                script {
+                    // Create directories
+                    sh '''
+                        mkdir -p ${REPORTS_DIR}
+                        mkdir -p ${BUILD_DIR}
+                        mkdir -p coverage
+                        mkdir -p artifacts
+                    '''
+
+                    // Display tool versions
+                    sh '''
+                        echo "=== Tool Versions ==="
+                        node --version 2>/dev/null || echo "Node.js not found"
+                        npm --version 2>/dev/null || echo "npm not found"
+                        python3 --version 2>/dev/null || echo "Python not found"
+                        docker --version 2>/dev/null || echo "Docker not found"
+                        echo "===================="
+                    '''
+                }
+            }
+
+            // Post-stage actions
+            post {
+                success {
+                    echo 'Setup completed successfully'
+                }
+                failure {
+                    echo 'Setup failed'
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 4: INSTALL DEPENDENCIES
+        // ======================================================================
+        stage('Install Dependencies') {
+            steps {
+                echo 'Installing dependencies...'
+
+                sh '''
+                    # Node.js project
+                    if [ -f package-lock.json ]; then
+                        echo "Installing with npm ci (clean install)..."
+                        npm ci --no-fund --no-audit --prefer-offline
+                    elif [ -f package.json ]; then
+                        echo "Installing with npm install..."
+                        npm install --no-fund --no-audit
+                    else
+                        echo "No package.json found, skipping npm install"
+                    fi
+
+                    # Python project (if requirements.txt exists)
+                    if [ -f requirements.txt ]; then
+                        echo "Installing Python dependencies..."
+                        pip3 install -r requirements.txt --quiet
+                    fi
+
+                    # Java/Maven project (if pom.xml exists)
+                    # if [ -f pom.xml ]; then
+                    #     echo "Installing Maven dependencies..."
+                    #     mvn dependency:go-offline
+                    # fi
+                '''
+            }
+
+            // Cache node_modules for faster builds
+            // Requires "Workspace Cleanup" plugin or similar
+            post {
+                always {
+                    echo 'Dependencies installation completed'
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 5: CODE QUALITY CHECKS
+        // ======================================================================
+        stage('Code Quality') {
+            parallel {
+                stage('Lint') {
+                    steps {
+                        echo 'Running linters...'
+
+                        sh '''
+                            # ESLint for JavaScript/TypeScript
+                            if command -v eslint &> /dev/null && [ -f .eslintrc.json ]; then
+                                echo "Running ESLint..."
+                                eslint . --format json --output-file ${REPORTS_DIR}/eslint-report.json || true
+                                eslint . --format stylish || true
+                            fi
+
+                            # Prettier check
+                            if command -v prettier &> /dev/null; then
+                                echo "Checking code formatting with Prettier..."
+                                prettier --check "src/**/*.js" "src/**/*.jsx" || true
+                            fi
+
+                            # Python linting
+                            if command -v pylint &> /dev/null; then
+                                echo "Running Pylint..."
+                                pylint src/ --output-format=text:${REPORTS_DIR}/pylint-report.txt || true
+                            fi
+                        '''
+                    }
+
+                    post {
+                        always {
+                            // Archive lint reports
+                            archiveArtifacts artifacts: 'reports/eslint-report.json', allowEmptyArchive: true
+                            archiveArtifacts artifacts: 'reports/pylint-report.txt', allowEmptyArchive: true
+                        }
+                    }
+                }
+
+                stage('Format Check') {
+                    steps {
+                        echo 'Checking code format...'
+
+                        sh '''
+                            # Prettier format check
+                            if command -v prettier &> /dev/null; then
+                                prettier --list-different "src/**/*.{js,jsx,ts,tsx,json,md}" || true
+                            fi
+
+                            # Black format check for Python
+                            if command -v black &> /dev/null; then
+                                black --check src/ || true
+                            fi
+                        '''
+                    }
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 6: UNIT TESTS
+        // ======================================================================
+        stage('Unit Tests') {
+            when {
+                expression { params.RUN_TESTS == true }
+            }
+
+            steps {
+                echo 'Running unit tests...'
+
+                sh '''
+                    # Jest for JavaScript/TypeScript
+                    if npm run | grep -q "test"; then
+                        echo "Running Jest tests..."
+                        npm run test -- --coverage --ci --reporters=default --reporters=jest-junit || true
+                    fi
+
+                    # Mocha/Chai
+                    # if [ -f test/mocha.opts ]; then
+                    #     echo "Running Mocha tests..."
+                    #     npm run test:mocha -- --reporter json --reporter-options output=${REPORTS_DIR}/mocha-report.json || true
+                    # fi
+
+                    # Pytest for Python
+                    # if command -v pytest &> /dev/null; then
+                    #     echo "Running Pytest..."
+                    #     pytest --junitxml=${REPORTS_DIR}/pytest-report.xml || true
+                    # fi
+                '''
+            }
+
+            post {
+                always {
+                    // Publish test results
+                    junit 'test-results/*.xml' || junit 'reports/junit.xml'
+
+                    // Publish coverage reports (Need Code Coverage API plugin)
+                    // publishCoverage adapters: [coberturaAdapter('coverage/cobertura.xml')]
+
+                    // Publish HTML reports
+                    // publishHTML([
+                    //     allowMissing: false,
+                    //     alwaysLinkToLastBuild: true,
+                    //     keepAll: true,
+                    //     reportDir: 'coverage',
+                    //     reportFiles: 'index.html',
+                    //     reportName: 'Coverage Report'
+                    // ])
+                }
+
+                success {
+                    script {
+                        // Send notification for test results
+                        echo 'Unit tests passed!'
+                    }
+                }
+
+                failure {
+                    script {
+                        if (params.FORCE_DEPLOY) {
+                            echo 'Tests failed but FORCE_DEPLOY is enabled, continuing...'
+                        } else {
+                            error 'Unit tests failed! Aborting pipeline.'
+                        }
+                    }
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 7: BUILD APPLICATION
+        // ======================================================================
+        stage('Build') {
+            steps {
+                echo 'Building application...'
+
+                script {
+                    // Build based on project type
+                    if (fileExists('package.json')) {
+                        echo 'Building Node.js application...'
+
+                        // Next.js build
+                        if (fileExists('next.config.js')) {
+                            sh '''
+                                echo "Building Next.js application..."
+                                npm run build
+                            '''
+                        }
+                        // React/Vue build
+                        else if (fileExists('src/App.jsx') || fileExists('src/App.vue')) {
+                            sh '''
+                                echo "Building SPA..."
+                                npm run build
+                            '''
+                        }
+                        // Plain Node.js
+                        else {
+                            sh '''
+                                echo "Transpiling TypeScript/JavaScript..."
+                                npm run build || echo "No build script found"
+                            '''
+                        }
+                    }
+
+                    // Python build (if needed)
+                    // if (fileExists('setup.py')) {
+                    //     echo 'Building Python package...'
+                    //     sh 'python3 setup.py bdist_wheel'
+                    // }
+
+                    // Maven build
+                    // if (fileExists('pom.xml')) {
+                    //     echo 'Building Maven project...'
+                    //     sh 'mvn clean package -DskipTests'
+                    // }
+
+                    // Gradle build
+                    // if (fileExists('build.gradle') || fileExists('build.gradle.kts')) {
+                    //     echo 'Building Gradle project...'
+                    //     sh './gradlew clean build -x test'
+                    // }
+                }
+            }
+
+            post {
+                success {
+                    echo 'Build completed successfully'
+                    // Archive build artifacts
+                    archiveArtifacts artifacts: 'dist/**/*', allowEmptyArchive: true
+                    archiveArtifacts artifacts: 'build/**/*', allowEmptyArchive: true
+                }
+                failure {
+                    echo 'Build failed!'
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 8: SECURITY SCANNING (PARALLEL)
+        // ======================================================================
+        stage('Security Scanning') {
+            parallel {
+                stage('SAST - Code Analysis') {
+                    steps {
+                        echo 'Running Static Application Security Testing...'
+
+                        // SonarQube scan
+                        script {
+                            try {
+                                withSonarQubeEnv('SonarQube-Server') {
+                                    sh '''
+                                        sonar-scanner \
+                                            -Dsonar.projectKey=${PROJECT_NAME} \
+                                            -Dsonar.projectName=${PROJECT_NAME} \
+                                            -Dsonar.sources=src \
+                                            -Dsonar.sourceEncoding=UTF-8 \
+                                            -Dsonar.host.url=$SONAR_HOST_URL \
+                                            -Dsonar.login=$SONAR_AUTH_TOKEN
+                                    '''
+                                }
+                            } catch (Exception e) {
+                                echo "SonarQube scan failed: ${e}"
+                            }
+                        }
+                    }
+                }
+
+                stage('SCA - Dependency Check') {
+                    steps {
+                        echo 'Running Software Composition Analysis...'
+
+                        sh '''
+                            # OWASP Dependency-Check
+                            if command -v dependency-check &> /dev/null; then
+                                echo "Running OWASP Dependency-Check..."
+                                dependency-check \
+                                    --format "HTML" \
+                                    --format "XML" \
+                                    --project "${PROJECT_NAME}" \
+                                    --out ${REPORTS_DIR}/dependency-check \
+                                    --scan . \
+                                    --enableExperimental || true
+                            fi
+
+                            # Snyk (if available)
+                            if command -v snyk &> /dev/null; then
+                                echo "Running Snyk scan..."
+                                snyk test --json > ${REPORTS_DIR}/snyk-report.json || true
+                            fi
+
+                            # Trivy filesystem scan
+                            if command -v trivy &> /dev/null; then
+                                echo "Running Trivy filesystem scan..."
+                                trivy fs \
+                                    --format json \
+                                    --output ${REPORTS_DIR}/trivy-report.json \
+                                    --severity HIGH,CRITICAL \
+                                    . || true
+
+                                trivy fs \
+                                    --format table \
+                                    --severity HIGH,CRITICAL \
+                                    . || true
+                            fi
+                        '''
+                    }
+
+                    post {
+                        always {
+                            publishHTML([
+                                reportDir: 'reports/dependency-check',
+                                reportFiles: 'dependency-check-report.html',
+                                reportName: 'Dependency Check Report',
+                                keepAll: true,
+                                alwaysLinkToLastBuild: true,
+                                allowMissing: true
+                            ])
+
+                            archiveArtifacts artifacts: 'reports/*-report.*', allowEmptyArchive: true
+                        }
+                    }
+                }
+
+                stage('Secrets Scan') {
+                    steps {
+                        echo 'Scanning for secrets...'
+
+                        sh '''
+                            # gitleaks (if available)
+                            if command -v gitleaks &> /dev/null; then
+                                echo "Running Gitleaks..."
+                                gitleaks detect --source . --report-path ${REPORTS_DIR}/gitleaks-report.json || true
+                            fi
+
+                            # trivy misconfig scan
+                            if command -v trivy &> /dev/null; then
+                                echo "Running Trivy config scan..."
+                                trivy config \
+                                    --format json \
+                                    --output ${REPORTS_DIR}/trivy-config-report.json \
+                                    . || true
+                            fi
+                        '''
+                    }
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 9: QUALITY GATE
+        // ======================================================================
+        stage('Quality Gate') {
+            steps {
+                echo 'Checking quality gate status...'
+
+                script {
+                    // Wait for SonarQube quality gate
+                    timeout(time: 10, unit: 'MINUTES') {
+                        waitForQualityGate abortPipeline: false
+                    }
+
+                    // Check OWASP Dependency Check results
+                    // If critical vulnerabilities found, fail the build
+                    // def dependencyCheckReport = readFile('reports/dependency-check/dependency-check-report.xml')
+                    // Parse XML and check for critical vulnerabilities...
+
+                    echo 'Quality gate checks completed'
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 10: DOCKER BUILD
+        // ======================================================================
+        stage('Docker Build') {
+            when {
+                expression { fileExists('Dockerfile') }
+            }
+
+            steps {
+                echo 'Building Docker image...'
+
+                script {
+                    // Docker image name with tags
+                    def imageName = "${env.PROJECT_NAME}"
+                    def imageTag = "${params.VERSION}-${env.BUILD_TIMESTAMP}"
+                    def fullImage = "${imageName}:${imageTag}"
+
+                    echo "Building Docker image: ${fullImage}"
+
+                    // Build with build args
+                    docker.build(fullImage,
+                        "--build-arg VERSION=${params.VERSION} " +
+                        "--build-arg BUILD_DATE=${env.BUILD_TIMESTAMP} " +
+                        "--build-arg GIT_COMMIT=${env.GIT_COMMIT_SHORT}"
+                    )
+
+                    // Tag with 'latest' and version
+                    docker.image(fullImage).tag("${imageName}:latest")
+                    docker.image(fullImage).tag("${imageName}:${params.VERSION}")
+
+                    // Save for later stages
+                    env.DOCKER_IMAGE_NAME = imageName
+                    env.DOCKER_IMAGE_TAG = imageTag
+                }
+            }
+
+            post {
+                success {
+                    echo 'Docker image built successfully'
+                }
+                failure {
+                    echo 'Docker build failed!'
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 11: DOCKER PUSH
+        // ======================================================================
+        stage('Docker Push') {
+            when {
+                beforeAgent true
+                expression { fileExists('Dockerfile') }
+            }
+
+            steps {
+                echo 'Pushing Docker image to registry...'
+
+                script {
+                    // Docker registry credentials
+                    withCredentials([usernamePassword(
+                        credentialsId: 'docker-registry-credentials',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )]) {
+                        sh """
+                            echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
+                        """
+                    }
+
+                    // Push all tagged images
+                    sh """
+                        docker push ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}
+                        docker push ${env.DOCKER_IMAGE_NAME}:latest
+                        docker push ${env.DOCKER_IMAGE_NAME}:${params.VERSION}
+                    """
+
+                    // Logout
+                    sh 'docker logout'
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 12: CONTAINER IMAGE SCAN
+        // ======================================================================
+        stage('Image Scan') {
+            when {
+                beforeAgent true
+                expression { fileExists('Dockerfile') }
+            }
+
+            steps {
+                echo 'Scanning Docker image for vulnerabilities...'
+
+                sh '''
+                    # Trivy image scan
+                    trivy image \
+                        --format json \
+                        --output ${REPORTS_DIR}/trivy-image-report.json \
+                        --severity HIGH,CRITICAL \
+                        --exit-code 1 \
+                        ${PROJECT_NAME}:${DOCKER_IMAGE_TAG} || true
+
+                    # Also output in table format for console
+                    trivy image \
+                        --format table \
+                        --severity HIGH,CRITICAL \
+                        ${PROJECT_NAME}:${DOCKER_IMAGE_TAG} || true
+                '''
+            }
+
+            post {
+                always {
+                    archiveArtifacts artifacts: 'reports/trivy-image-report.json', allowEmptyArchive: true
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 13: DEPLOY TO DEV (AUTOMATIC)
+        // ======================================================================
+        stage('Deploy to Dev') {
+            when {
+                expression { params.ENVIRONMENT == 'dev' || params.ENVIRONMENT == 'staging' }
+            }
+
+            steps {
+                echo "Deploying to ${params.ENVIRONMENT}..."
+
+                script {
+                    // Choose deployment method based on infrastructure
+
+                    // Method 1: Kubernetes deployment
+                    // if (fileExists('k8s/deployment.yaml')) {
+                    //     withKubeConfig([
+                    //         credentialsId: 'k8s-dev-credentials',
+                    //         serverUrl: 'https://k8s-dev-cluster:6443'
+                    //     ]) {
+                    //         sh """
+                    //             kubectl set image deployment/${PROJECT_NAME} \
+                    //                 ${PROJECT_NAME}=${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} \
+                    //                 --namespace=dev
+                    //             kubectl rollout status deployment/${PROJECT_NAME} --namespace=dev
+                    //         """
+                    //     }
+                    // }
+
+                    // Method 2: Docker Compose deployment
+                    // if (fileExists('docker-compose.dev.yaml')) {
+                    //     sh """
+                    //         docker-compose -f docker-compose.dev.yaml pull
+                    //         docker-compose -f docker-compose.dev.yaml up -d
+                    //     """
+                    // }
+
+                    // Method 3: SSH deployment
+                    // withCredentials([
+                    //     sshUserPrivateKey(
+                    //         credentialsId: 'dev-server-ssh',
+                    //         keyFileVariable: 'SSH_KEY',
+                    //         usernameVariable: 'SSH_USER'
+                    //     )
+                    // ]) {
+                    //     sh """
+                    //         ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no \
+                    //             \${SSH_USER}@dev-server "cd /app && docker-compose pull && docker-compose up -d"
+                    //     """
+                    // }
+
+                    // Method 4: AWS ECS deployment
+                    // sh """
+                    //     aws ecs update-service \
+                    //         --cluster dev-cluster \
+                    //         --service ${PROJECT_NAME} \
+                    //         --force-new-deployment \
+                    //         --region us-east-1
+                    // """
+
+                    echo "Deployment to ${params.ENVIRONMENT} completed!"
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 14: INTEGRATION TESTS
+        // ======================================================================
+        stage('Integration Tests') {
+            when {
+                expression { params.RUN_TESTS == true }
+            }
+
+            steps {
+                echo 'Running integration tests...'
+
+                sh '''
+                    # Run integration tests
+                    if npm run | grep -q "test:integration"; then
+                        npm run test:integration || true
+                    fi
+
+                    # Or use Cypress for E2E tests
+                    # if command -v cypress &> /dev/null; then
+                    #     cypress run --config cypress.config.js --env env=${params.ENVIRONMENT}
+                    # fi
+                '''
+            }
+
+            post {
+                always {
+                    // Publish integration test results
+                    junit 'test-results/integration/*.xml' || echo 'No integration test results found'
+
+                    // Archive test screenshots/videos (for Cypress)
+                    // archiveArtifacts artifacts: 'cypress/screenshots/**/*', allowEmptyArchive: true
+                    // archiveArtifacts artifacts: 'cypress/videos/**/*', allowEmptyArchive: true
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 15: DEPLOY TO STAGING (WITH APPROVAL)
+        // ======================================================================
+        stage('Deploy to Staging') {
+            when {
+                expression { params.ENVIRONMENT == 'staging' || params.ENVIRONMENT == 'production' }
+            }
+
+            steps {
+                script {
+                    // Manual approval for production
+                    if (params.ENVIRONMENT == 'production') {
+                        input message: 'Deploy to PRODUCTION?', ok: 'Deploy'
+
+                        // Double confirmation for production
+                        input(
+                            message: 'CONFIRM: This will deploy to PRODUCTION. Are you sure?',
+                            ok: 'Yes, deploy to production',
+                            submitter: 'admin,devops-lead',
+                            submitterParameter: 'APPROVER'
+                        )
+
+                        // Record who approved
+                        env.DEPLOY_APPROVER = env.APPROVER
+                    }
+
+                    echo "Deploying to ${params.ENVIRONMENT}..."
+                    echo "Approved by: ${env.DEPLOY_APPROVER ?: 'N/A'}"
+
+                    // Deployment commands (similar to dev but for staging/prod)
+                    // ...
+
+                    echo "Deployment to ${params.ENVIRONMENT} completed!"
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 16: SMOKE TESTS
+        // ======================================================================
+        stage('Smoke Tests') {
+            steps {
+                echo 'Running smoke tests...'
+
+                script {
+                    // Wait for application to be ready
+                    sleep(time: 10, unit: 'SECONDS')
+
+                    // HTTP health check
+                    def healthCheckUrl = params.ENVIRONMENT == 'production' ?
+                        "https://app.${params.ENVIRONMENT}.com/api/health" :
+                        "https://app-${params.ENVIRONMENT}.herokuapp.com/api/health"
+
+                    echo "Checking health endpoint: ${healthCheckUrl}"
+
+                    // Simple HTTP check
+                    sh """
+                        curl -f ${healthCheckUrl} || exit 1
+                    """
+
+                    // More comprehensive smoke tests
+                    sh '''
+                        # Test main endpoint
+                        curl -f ${HEALTH_URL}/api/health || exit 1
+
+                        # Test API version endpoint
+                        curl -f ${HEALTH_URL}/api/version || exit 1
+
+                        # Test with authentication (if needed)
+                        # curl -f -H "Authorization: Bearer ${API_TOKEN}" ${HEALTH_URL}/api/user || exit 1
+                    '''
+                }
+            }
+
+            post {
+                failure {
+                    echo 'Smoke tests failed! Rolling back...'
+                    // Rollback deployment
+                    // sh 'kubectl rollout undo deployment/${PROJECT_NAME} --namespace=${params.ENVIRONMENT}'
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 17: PERFORMANCE TESTS (OPTIONAL)
+        // ======================================================================
+        stage('Performance Tests') {
+            when {
+                expression { params.ENVIRONMENT == 'staging' }
+            }
+
+            steps {
+                echo 'Running performance tests...'
+
+                sh '''
+                    # k6 performance testing
+                    if command -v k6 &> /dev/null; then
+                        echo "Running k6 load tests..."
+                        k6 run --out json=${REPORTS_DIR}/k6-report.json tests/performance/load-test.js || true
+                    fi
+
+                    # JMeter (if configured)
+                    # if command -v jmeter &> /dev/null; then
+                    #     echo "Running JMeter tests..."
+                    #     jmeter -n -t tests/performance/test-plan.jmx -l ${REPORTS_DIR}/jmeter-results.jtl
+                    # fi
+                '''
+            }
+
+            post {
+                always {
+                    // Archive performance test results
+                    archiveArtifacts artifacts: 'reports/k6-report.json', allowEmptyArchive: true
+                    archiveArtifacts artifacts: 'reports/jmeter-results.jtl', allowEmptyArchive: true
+
+                    // Publish performance trend reports (Need Performance Plugin)
+                    // performanceReportReportThresholds: 'failed', compareBuildPrevious: []
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 18: DEPLOY TO PRODUCTION (FINAL)
+        // ======================================================================
+        stage('Deploy to Production') {
+            when {
+                expression { params.ENVIRONMENT == 'production' }
+            }
+
+            steps {
+                echo 'Final production deployment...'
+
+                script {
+                    // Blue-Green Deployment (zero downtime)
+                    // def currentColor = sh(script: 'kubectl get service ${PROJECT_NAME}-lb -o jsonpath="{.spec.selector.color}"', returnStdout: true).trim()
+                    // def newColor = currentColor == 'blue' ? 'green' : 'blue'
+                    //
+                    // echo "Deploying to ${newColor} environment..."
+                    // // Deploy to new color
+                    // sh "kubectl apply -f k8s/production/${newColor}/"
+                    // sh "kubectl wait --for=condition=ready pod -l color=${newColor} --timeout=300s"
+                    //
+                    // // Switch traffic
+                    // sh "kubectl patch service ${PROJECT_NAME}-lb -p '{\"spec\":{\"selector\":{\"color\":\"${newColor}\"}}}'"
+                    //
+                    // echo "Blue-Green deployment completed!"
+
+                    // Canary Deployment (gradual rollout)
+                    // 1. Deploy canary (10% traffic)
+                    // 2. Monitor metrics
+                    // 3. If OK, rollout to 50%
+                    // 4. If OK, rollout to 100%
+                    // 5. Remove old deployment
+
+                    echo "Production deployment completed!"
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 19: CLEANUP
+        // ======================================================================
+        stage('Cleanup') {
+            steps {
+                echo 'Performing cleanup tasks...'
+
+                script {
+                    // Clean old Docker images from agent
+                    sh '''
+                        # Remove dangling Docker images
+                        docker image prune -f
+
+                        # Remove old build artifacts (keep last 5)
+                        ls -t ${BUILD_DIR}/*.tar 2>/dev/null | tail -n +6 | xargs -r rm || true
+                    '''
+
+                    // Clean old application logs (if needed)
+                    // sh "find /var/log/${PROJECT_NAME} -name '*.log' -mtime +7 -delete"
+
+                    echo 'Cleanup completed'
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 20: NOTIFICATIONS
+        // ======================================================================
+        stage('Notify') {
+            steps {
+                echo 'Sending notifications...'
+
+                script {
+                    def buildStatus = currentBuild.result ?: 'SUCCESS'
+                    def buildColor = buildStatus == 'SUCCESS' ? 'good' : 'danger'
+                    def buildEmoji = buildStatus == 'SUCCESS' ? '✅' : '❌'
+
+                    // Send Slack notification
+                    slackSend(
+                        channel: '#deployments',
+                        color: buildColor,
+                        message: """
+                            ${buildEmoji} ${env.PROJECT_NAME} - ${buildStatus}
+                            Environment: ${params.ENVIRONMENT}
+                            Version: ${params.VERSION}
+                            Build: ${env.BUILD_URL}
+                            Approved by: ${env.DEPLOY_APPROVER ?: 'N/A'}
+                        """.stripIndent()
+                    )
+
+                    // Send email notification
+                    emailext(
+                        subject: "[${buildStatus}] ${env.PROJECT_NAME} - ${params.ENVIRONMENT}",
+                        body: """
+                            <h2>Build ${buildStatus}</h2>
+                            <p><strong>Project:</strong> ${env.PROJECT_NAME}</p>
+                            <p><strong>Environment:</strong> ${params.ENVIRONMENT}</p>
+                            <p><strong>Version:</strong> ${params.VERSION}</p>
+                            <p><strong>Build Number:</strong> ${env.BUILD_NUMBER}</p>
+                            <p><strong>Git Commit:</strong> ${env.GIT_COMMIT_SHORT}</p>
+                            <p><strong>Approved by:</strong> ${env.DEPLOY_APPROVER ?: 'N/A'}</p>
+                            <p><a href="${env.BUILD_URL}">View Build</a></p>
+                            <p><a href="${env.BUILD_URL}console">View Logs</a></p>
+                        """.stripIndent(),
+                        to: 'team@example.com',
+                        mimeType: 'text/html'
+                    )
+
+                    // Send Microsoft Teams notification
+                    // office365ConnectorSend(
+                    //     webhookUrl: 'TEAMS_WEBHOOK_URL',
+                    //     status: buildStatus,
+                    //     color: buildColor
+                    // )
+
+                    // Send Discord notification
+                    // webhook(
+                    //     url: 'DISCORD_WEBHOOK_URL',
+                    //     contentType: 'APPLICATION_JSON',
+                    //     payload: """{
+                    //         "username": "Jenkins",
+                    //         "avatar_url": "https://wiki.jenkins.io/download/attachments/2916393/headshot.png",
+                    //         "embeds": [{
+                    //             "title": "${env.PROJECT_NAME} - ${buildStatus}",
+                    //             "color": ${buildStatus == 'SUCCESS' ? '3066993' : '15158332'},
+                    //             "fields": [
+                    //                 {"name": "Environment", "value": "${params.ENVIRONMENT}", "inline": true},
+                    //                 {"name": "Version", "value": "${params.VERSION}", "inline": true},
+                    //                 {"name": "Build", "value": "[#${env.BUILD_NUMBER}](${env.BUILD_URL})", "inline": false}
+                    //             ]
+                    //         }]
+                    //     }"""
+                    // )
+
+                    echo 'Notifications sent!'
+                }
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // POST BUILD ACTIONS
+    // -------------------------------------------------------------------------
+    post {
+        always {
+            echo '=================================='
+            echo '  PIPELINE COMPLETED'
+            echo '=================================='
+            echo "Status: ${currentBuild.result ?: 'SUCCESS'}"
+            echo "Duration: ${currentBuild.durationString}"
+            echo "=================================="
+
+            // Archive all artifacts
+            archiveArtifacts artifacts: 'build/**/*', allowEmptyArchive: true
+            archiveArtifacts artifacts: 'dist/**/*', allowEmptyArchive: true
+            archiveArtifacts artifacts: 'reports/**/*', allowEmptyArchive: true
+            archiveArtifacts artifacts: 'coverage/**/*', allowEmptyArchive: true
+
+            // Archive test results
+            junit 'test-results/**/*.xml' || echo 'No test results found'
+
+            // Clean workspace to save disk space
+            cleanWs(
+                deleteDirs: true,
+                disableDeferredWipeout: true,
+                notFailBuild: true
+            )
+        }
+
+        success {
+            echo '✅ Pipeline completed successfully!'
+
+            script {
+                // Update build status badge
+                // createBadge(id: 'build-status', status: 'success', label: 'Build', color: 'green')
+
+                // Tag Git commit
+                // if (params.ENVIRONMENT == 'production') {
+                //     sh """
+                //         git tag -a v${params.VERSION} -m "Release version ${params.VERSION}"
+                //         git push origin v${params.VERSION}
+                //     """
+                // }
+            }
+        }
+
+        failure {
+            echo '❌ Pipeline failed!'
+
+            script {
+                // Send alert notification
+                // slackSend(
+                //     channel: '#alerts',
+                //     color: 'danger',
+                //     message: "🚨 ${env.PROJECT_NAME} build FAILED! ${env.BUILD_URL}"
+                // )
+            }
+        }
+
+        unstable {
+            echo '⚠️ Pipeline is unstable (tests failed or quality gate not met)'
+
+            script {
+                // Send warning notification
+                // slackSend(
+                //     channel: '#deployments',
+                //     color: 'warning',
+                //     message: "⚠️ ${env.PROJECT_NAME} build is UNSTABLE"
+                // )
+            }
+        }
+
+        aborted {
+            echo '⏸️ Pipeline was aborted by user'
+
+            script {
+                // Send notification
+                // slackSend(
+                //     channel: '#deployments',
+                //     color: 'warning',
+                //     message: "⏸️ ${env.PROJECT_NAME} build was ABORTED"
+                // )
+            }
+        }
+
+        cleanup {
+            echo 'Performing final cleanup...'
+
+            script {
+                // Remove temporary credentials
+                // sh 'rm -f ~/.aws/credentials'
+                // sh 'rm -f ~/.docker/config.json'
+            }
+        }
+    }
+}
+
+// =============================================================================
+// SECTION 20: ADVANCED FEATURES
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// 20.1 MATRIX BUILDS - Multi-configuration testing
+// -----------------------------------------------------------------------------
+// matrix builds allow testing across multiple configurations simultaneously
+// Uncomment to use:
+
+// stage('Matrix Build') {
+//     matrix {
+//         axes {
+//             axis {
+//                 name 'NODE_VERSION'
+//                 values '18', '20', '21'
+//             }
+//             axis {
+//                 name 'OS'
+//                 values 'linux', 'windows'
+//             }
+//         }
+//         stages {
+//             stage('Build') {
+//                 steps {
+//                     echo "Building on Node ${NODE_VERSION} - ${OS}"
+//                     sh "npm run build"
+//                 }
+//             }
+//             stage('Test') {
+//                 steps {
+//                     echo "Testing on Node ${NODE_VERSION} - ${OS}"
+//                     sh "npm test"
+//                 }
+//             }
+//         }
+//         // Exclude certain combinations
+//         excludes {
+//             exclude {
+//                 axis {
+//                     name 'NODE_VERSION'
+//                     values '18'
+//                 }
+//                 axis {
+//                     name 'OS'
+//                     values 'windows'
+//                 }
+//             }
+//         }
+//     }
+// }
+
+// -----------------------------------------------------------------------------
+// 20.2 SHARED LIBRARIES - Reusable code
+// -----------------------------------------------------------------------------
+// Define in vars/ or src/ in shared library repo
+
+// @Library('shared-lib@main') _
+// import com.example.Utils
+
+// pipeline {
+//     agent any
+//     stages {
+//         stage('Use Shared Library') {
+//             steps {
+//                 script {
+//                     // Use custom function from shared library
+//                     Utils.standardBuild()
+//                 }
+//             }
+//         }
+//     }
+// }
+
+// Example shared library structure:
+// vars/
+//   standardBuild.groovy
+//   deploy.groovy
+//   notify.groovy
+// src/
+//   com/example/Utils.groovy
+
+// -----------------------------------------------------------------------------
+// 20.3 SCRIPTED PIPELINE - For complex logic
+// -----------------------------------------------------------------------------
+// When declarative is not flexible enough, use scripted:
+
+// node {
+//     try {
+//         stage('Checkout') {
+//             checkout scm
+//         }
+
+//         stage('Build') {
+//             sh 'npm run build'
+//         }
+
+//         stage('Test') {
+//             try {
+//                 sh 'npm test'
+//             } catch (Exception e) {
+//                 currentBuild.result = 'UNSTABLE'
+//                 echo "Tests failed: ${e}"
+//             }
+//         }
+
+//         stage('Deploy') {
+//             if (params.ENVIRONMENT == 'production') {
+//                 input message: 'Deploy to production?'
+//             }
+//             sh './deploy.sh'
+//         }
+
+//         currentBuild.result = 'SUCCESS'
+//     } catch (Exception e) {
+//         currentBuild.result = 'FAILURE'
+//         throw e
+//     } finally {
+//         cleanWs()
+//     }
+// }
+
+// =============================================================================
+// SECTION 21: CI/CD BEST PRACTICES
+// =============================================================================
+
+// 1. ✅ ALWAYS use timeout to prevent hung builds
+// options {
+//     timeout(time: 1, unit: 'HOURS')
+// }
+
+// 2. ✅ Use timestamps for better debugging
+// options {
+//     timestamps()
+// }
+
+// 3. ✅ Disable concurrent builds for same branch
+// options {
+//     disableConcurrentBuilds()
+// }
+
+// 4. ✅ Use parameters for flexibility
+// parameters {
+//     booleanParam(name: 'RUN_TESTS', defaultValue: true)
+// }
+
+// 5. ✅ Archive all artifacts
+// post {
+//     always {
+//         archiveArtifacts artifacts: '**/*', allowEmptyArchive: true
+//     }
+// }
+
+// 6. ✅ Always run tests in CI/CD
+// stage('Test') {
+//     steps {
+//         sh 'npm test'
+//     }
+// }
+
+// 7. ✅ Security scanning in pipeline
+// stage('Security Scan') {
+//     steps {
+//         sh 'trivy fs .'
+//     }
+// }
+
+// 8. ✅ Manual approval for production
+// stage('Deploy to Prod') {
+//     steps {
+//         input message: 'Approve production deployment?'
+//         sh 'kubectl apply -f prod/'
+//     }
+// }
+
+// 9. ✅ Use credentials management
+// withCredentials([string(credentialsId: 'token', variable: 'TOKEN')]) {
+//     sh 'echo $TOKEN'
+// }
+
+// 10. ✅ Parallel execution for faster builds
+// parallel(
+//     "Unit Tests": { sh 'npm run test:unit' },
+//     "Lint": { sh 'npm run lint' },
+//     "Type Check": { sh 'npm run type-check' }
+// )
+
+// 11. ✅ Clean workspace to prevent conflicts
+// post {
+//     always {
+//         cleanWs()
+//     }
+// }
+
+// 12. ✅ Send notifications on all outcomes
+// post {
+//     success { slackSend(...) }
+//     failure { slackSend(...) }
+//     unstable { slackSend(...) }
+// }
+
+// 13. ✅ Use matrix builds for multi-version testing
+// matrix {
+//     axes {
+//         axis {
+//             name 'NODE_VERSION'
+//             values '18', '20'
+//         }
+//     }
+// }
+
+// 14. ✅ Use Docker agents for consistency
+// agent {
+//     docker {
+//         image 'node:20-alpine'
+//     }
+// }
+
+// 15. ✅ Implement rollback strategy
+// post {
+//     failure {
+//         sh 'kubectl rollout undo deployment/app'
+//     }
+// }
+
+// =============================================================================
+// END OF COMPREHENSIVE JENKINSFILE
+// =============================================================================

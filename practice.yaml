@@ -1,0 +1,1561 @@
+---
+# =====================================================================
+# ANSIBLE AWS PRACTICE PLAYBOOK - FILL IN THE BLANKS
+# =====================================================================
+# Mục tiêu: Thực hành điền code vào các chỗ trống (___)
+# Gợi ý: Mỗi ___ có thể là 1 từ hoặc nhiều từ
+# =====================================================================
+
+# =====================================================================
+# PHẦN 1: ANSIBLE BASICS
+# =====================================================================
+
+# TODO: Section 1 - Complete the basic playbook structure
+- name: "Section 1: Basic Playbook Structure"
+  hosts: ①           # TODO: Chỉ định host pattern cho localhost
+  connection: local
+  gather_facts: ②          # TODO: True hoặc False để thu thập system facts
+  vars:
+    message: "Hello Ansible!"
+
+  tasks:
+    - name: "Print greeting message"
+      ansible.builtin.debug:
+        msg: ③            # TODO: Tham chiếu đến biến message
+
+# =====================================================================
+# PHẦN 2: VARIABLES và FACTS
+# =====================================================================
+
+# TODO: Section 2 - Variables
+- name: "Section 2: Variables và Facts"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    # TODO: Điền các giá trị phù hợp
+    app_name: ①____________           # TODO: Tên application
+    app_port: ②____________           # TODO: Port number
+    enable_ssl: ③____________         # TODO: Boolean value
+
+    # TODO: Tạo list với 3 availability zones
+    availability_zones:
+      - us-east-1a
+      - ④____________
+      - ⑤____________
+
+    # TODO: Tạo dictionary cho instance config
+    instance_config:
+      type: ⑥____________          # TODO: Instance type
+      count: ⑦____________         # TODO: Số lượng instances
+      monitoring: ⑧____________    # TODO: Boolean value
+
+  tasks:
+    - name: "Display application name"
+      ansible.builtin.debug:
+        msg: "Application: ⑨_____________" # TODO: Tham chiếu biến app_name
+
+    - name: "Display first availability zone"
+      ansible.builtin.debug:
+        msg: "First AZ: ⑩_______________[0]" # TODO: Access phần tử đầu tiên của list
+
+    - name: "Display instance type from config"
+      ansible.builtin.debug:
+        msg: "Instance type: ⑪_______________.type" # TODO: Access dictionary value
+
+    - name: "Display OS distribution"
+      ansible.builtin.debug:
+        msg: "OS: ⑫_______________" # TODO: Access fact cho OS name
+      when: ⑬_______________ is defined
+
+# =====================================================================
+# PHẦN 3: LOOPS và CONDITIONS
+# =====================================================================
+
+# TODO: Section 3 - Loops
+- name: "Section 3: Loops và Conditions"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    users:
+      - alice
+      - bob
+      - charlie
+    ports: [80, 443, 8080]
+    environment: production
+
+  tasks:
+    # TODO: Loop over users
+    - name: "Display all users"
+      ansible.builtin.debug:
+        msg: "User: ①__________"
+      ②__________: "{{ users }}"
+
+    # TODO: Loop với index
+    - name: "Display ports with index"
+      ansible.builtin.debug:
+        msg: "Port {{ item.0 }} at position {{ item.1 }}"
+      loop: "{{ ports | ③______________ }}"
+
+    # TODO: Conditional task
+    - name: "Run only in production"
+      ansible.builtin.debug:
+        msg: "This is production!"
+      when: ④_______________ == "production"
+
+    # TODO: Multiple conditions
+    - name: "Run when both conditions are true"
+      ansible.builtin.debug:
+        msg: "All conditions met"
+      when:
+        - ⑤_______________ | default(false)
+        - ⑥_______________ == "production"
+
+    # TODO: Failed when với điều kiện
+    - name: "Check required variable"
+      ansible.builtin.debug:
+        msg: "Checking required_var"
+      failed_when: required_var is ⑦_______________
+
+# =====================================================================
+# PHẦN 4: AWS EC2 MANAGEMENT
+# =====================================================================
+
+# TODO: Section 4 - EC2 Key Pair
+- name: "Section 4: EC2 Key Pair Management"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    key_name: ①_______________        # TODO: Tên key pair
+
+  tasks:
+    # TODO: Tạo EC2 key pair
+    - name: "Create key pair"
+      amazon.aws.ec2_key:
+        name: "{{ ②_______________ }}"
+        region: "{{ ③_______________ }}"
+        key_material: "{{ ④__________('file', '~/.ssh/id_rsa.pub') }}"
+
+# TODO: Section 5 - EC2 Instances
+- name: "Section 5: Launch EC2 Instances"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    instance_type: ①_____________          # TODO: Instance type
+    ami_id: ami-0c7217cdde317cfec         # Amazon Linux 2 AMI
+    key_name: my-key-pair
+    vpc_subnet_id: subnet-xxxxxxxx
+    instance_count: ②_____________          # TODO: Số lượng instances
+    tags:
+      Environment: dev
+      Application: ③_____________          # TODO: Application name
+
+  tasks:
+    # TODO: Launch EC2 instances
+    - name: "Launch instances"
+      amazon.aws.ec2_instance:
+        name: "web-{{ item }}{{ ansible_date_time.④_____________ }}"
+        region: "{{ aws_region }}"
+        key_name: "{{ ⑤_____________ }}"
+        instance_type: "{{ ⑥_____________ }}"
+        image_id: "{{ ⑦_____________ }}"
+        subnet_id: "{{ ⑧_____________ }}"
+        network:
+          assign_public_ip: ⑨_____________
+        user_data: |
+          #!/bin/bash
+          yum update -y
+          yum install -y ⑩_____________
+          systemctl start httpd
+          systemctl enable httpd
+        tags: "{{ tags }}"
+        state: present
+        count: 1
+      loop: "{{ range(1, instance_count + 1) | ⑪_____________ }}"
+      register: ⑫_____________
+
+    # TODO: Display instance information
+    - name: "Show instance IDs"
+      ansible.builtin.debug:
+        msg: "Instance created: {{ item.instance_ids[⑬_____________] }}"
+      loop: "{{ ec2_instances.⑭_____________ }}"
+      when: item.⑮_____________
+
+    # TODO: Wait cho instances to be running
+    - name: "Wait for instances to be running"
+      amazon.aws.ec2_instance_info:
+        region: "{{ aws_region }}"
+        instance_ids:
+          - "{{ item.instance_ids[0] }}"
+      register: instance_info
+      until: instance_info.instances[0].state.name == "⑯_____________"
+      retries: 30
+      delay: 10
+      loop: "{{ ec2_instances.results }}"
+
+# =====================================================================
+# PHẦN 5: VPC và NETWORKING
+# =====================================================================
+
+# TODO: Section 6 - VPC Creation
+- name: "Section 6: Create VPC"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    vpc_cidr: ①_____________          # TODO: CIDR block
+    vpc_name: ansible-vpc
+
+  tasks:
+    # TODO: Create VPC
+    - name: "Create VPC"
+      amazon.aws.ec2_vpc_net:
+        name: "{{ vpc_name }}"
+        cidr_block: "{{ ②_____________ }}"
+        region: "{{ ③_____________ }}"
+        dns_hostnames: ④_____________
+        dns_support: ⑤_____________
+        state: present
+      register: ⑥_____________
+
+    # TODO: Display VPC ID
+    - name: "Show VPC ID"
+      ansible.builtin.debug:
+        msg: "VPC ID: {{ vpc_result.⑦_____________.id }}"
+
+# TODO: Section 7 - Internet Gateway
+- name: "Section 7: Create Internet Gateway"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    vpc_id: vpc-xxxxxxxx              # TODO: Thay bằng VPC ID thực
+
+  tasks:
+    # TODO: Create Internet Gateway
+    - name: "Create IGW"
+      amazon.aws.ec2_vpc_igw:
+        vpc_id: "{{ ①_____________ }}"
+        region: "{{ ②_____________ }}"
+        state: present
+      register: ③_____________
+
+    - name: "Display IGW ID"
+      ansible.builtin.debug:
+        msg: "IGW ID: {{ igw_result.④_____________ }}"
+
+# TODO: Section 8 - Subnets
+- name: "Section 8: Create Subnets"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    vpc_id: vpc-xxxxxxxx
+    public_subnet_cidrs:
+      - 10.0.1.0/①_____________         # TODO: CIDR notation
+      - 10.0.2.0/②_____________
+    availability_zones:
+      - us-east-1a
+      - us-east-1b
+
+  tasks:
+    # TODO: Create public subnets
+    - name: "Create public subnets"
+      amazon.aws.ec2_vpc_subnet:
+        vpc_id: "{{ ③_____________ }}"
+        region: "{{ ④_____________ }}"
+        cidr: "{{ item.⑤_____________ }}"
+        az: "{{ item.⑥_____________ }}"
+        state: present
+        tags:
+          Type: ⑦_____________
+          Name: "public-subnet-{{ item.az }}"
+      loop:
+        - { cidr: "{{ public_subnet_cidrs[0] }}", az: "{{ availability_zones[0] }}" }
+        - { cidr: "{{ public_subnet_cidrs[1] }}", az: "{{ availability_zones[1] }}" }
+      register: ⑧_____________
+
+# TODO: Section 9 - NAT Gateway
+- name: "Section 9: Create NAT Gateway"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    public_subnet_id: subnet-xxxxxxxx
+
+  tasks:
+    # TODO: Allocate Elastic IP
+    - name: "Allocate Elastic IP"
+      amazon.aws.ec2_eip:
+        region: "{{ ①_____________ }}"
+        in_vpc: ②_____________
+        state: present
+      register: ③_____________
+
+    # TODO: Create NAT Gateway
+    - name: "Create NAT Gateway"
+      amazon.aws.ec2_vpc_nat_gateway:
+        region: "{{ aws_region }}"
+        subnet_id: "{{ ④_____________ }}"
+        eip_address: "{{ eip_nat.⑤_____________ }}"
+        state: present
+      register: ⑥_____________
+
+# TODO: Section 10 - Route Tables
+- name: "Section 10: Create Route Tables"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    vpc_id: vpc-xxxxxxxx
+    igw_id: igw-xxxxxxxx
+    public_subnet_ids:
+      - subnet-xxxxxxxx
+      - subnet-yyyyyyyy
+
+  tasks:
+    # TODO: Create public route table
+    - name: "Create public route table"
+      amazon.aws.ec2_vpc_route_table:
+        vpc_id: "{{ ①_____________ }}"
+        region: "{{ ②_____________ }}"
+        tags:
+          Name: public-rt
+        subnets: "{{ ③_____________ }}"
+        routes:
+          - dest: ④_____________
+            gateway_id: "{{ ⑤_____________ }}"
+      register: ⑥_____________
+
+# =====================================================================
+# PHẦN 6: SECURITY GROUPS
+# =====================================================================
+
+# TODO: Section 11 - Security Groups
+- name: "Section 11: Create Security Groups"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    vpc_id: vpc-xxxxxxxx
+
+  tasks:
+    # TODO: Create web server security group
+    - name: "Create web security group"
+      amazon.aws.ec2_security_group:
+        name: web-sg
+        description: "Security group for web servers"
+        vpc_id: "{{ ①_____________ }}"
+        region: "{{ ②_____________ }}"
+        rules:
+          - proto: ③_____________            # TODO: Protocol
+            ports:
+              - ④_____________               # TODO: HTTP port
+              - ⑤_____________               # TODO: HTTPS port
+            cidr_ip: 0.0.0.0/⑥_____________  # TODO: CIDR notation
+            rule_desc: "Allow HTTP/HTTPS"
+          - proto: tcp
+            ports:
+              - 22
+            cidr_ip: 10.0.0.0/16
+            rule_desc: "Allow SSH from VPC"
+        tags:
+          Name: ⑦_____________
+          Environment: dev
+      register: ⑧_____________
+
+# =====================================================================
+# PHẦN 7: S3 BUCKETS
+# =====================================================================
+
+# TODO: Section 12 - S3 Bucket Creation
+- name: "Section 12: Create S3 Bucket"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    bucket_name: ①_______________           # TODO: Unique bucket name
+
+  tasks:
+    # TODO: Create S3 bucket
+    - name: "Create bucket"
+      amazon.aws.s3_bucket:
+        name: "{{ ②_____________ }}"
+        region: "{{ ③_____________ }}"
+        state: ④_____________
+        tags:
+          Environment: dev
+        encryption: ⑤_____________           # TODO: Encryption type
+        versioning: ⑥_____________           # TODO: Enable versioning?
+        public_access:
+          BlockPublicAcls: ⑦_____________
+          IgnorePublicAcls: true
+      register: ⑧_____________
+
+# TODO: Section 13 - Upload Files to S3
+- name: "Section 13: Upload to S3"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    bucket_name: my-ansible-bucket
+
+  tasks:
+    # TODO: Upload file
+    - name: "Upload file to S3"
+      amazon.aws.s3_object:
+        bucket: "{{ ①_____________ }}"
+        region: "{{ ②_____________ }}"
+        object: /config/app-config.yaml
+        src: /tmp/app-config.yaml
+        mode: ③_____________                # TODO: Mode cho upload
+
+    # TODO: Download file
+    - name: "Download file from S3"
+      amazon.aws.s3_object:
+        bucket: "{{ bucket_name }}"
+        region: "{{ aws_region }}"
+        object: /config/app-config.yaml
+        dest: /tmp/downloaded-config.yaml
+        mode: ④_____________                # TODO: Mode cho download
+
+    # TODO: Generate presigned URL
+    - name: "Generate presigned URL"
+      amazon.aws.s3_object:
+        bucket: "{{ bucket_name }}"
+        region: "{{ aws_region }}"
+        object: /public/file.txt
+        expiry: ⑤_____________              # TODO: Seconds
+        mode: ⑥_____________                # TODO: Mode cho URL generation
+      register: ⑦_____________
+
+# =====================================================================
+# PHẦN 8: RDS DATABASES
+# =====================================================================
+
+# TODO: Section 14 - RDS Instance
+- name: "Section 14: Create RDS Database"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    db_instance_id: ansible-mysql-db
+    db_engine: ①_____________               # TODO: Database engine
+    db_engine_version: 8.0
+    db_instance_class: ②_____________       # TODO: Instance class
+    db_name: appdb
+    db_username: admin
+    db_password: "{{ vault_db_password }}"
+    db_allocated_storage: ③_____________    # TODO: Storage size in GB
+    vpc_security_group_ids:
+      - sg-xxxxxxxx
+
+  tasks:
+    # TODO: Create RDS instance
+    - name: "Create MySQL database"
+      community.aws.rds_instance:
+        id: "{{ ④_____________ }}"
+        region: "{{ ⑤_____________ }}"
+        engine: "{{ ⑥_____________ }}"
+        engine_version: "{{ ⑦_____________ }}"
+        instance_class: "{{ ⑧_____________ }}"
+        allocated_storage: "{{ ⑨_____________ }}"
+        storage_encrypted: ⑩_____________
+        db_name: "{{ ⑪_____________ }}"
+        username: "{{ ⑫_____________ }}"
+        password: "{{ ⑬_____________ }}"
+        port: 3306
+        vpc_security_group_ids: "{{ ⑭_____________ }}"
+        publicly_accessible: ⑮_____________
+        backup_retention_period: ⑯_____________    # TODO: Days
+        state: present
+      register: ⑰_____________
+
+    # TODO: Wait for RDS to be available
+    - name: "Wait for RDS"
+      community.aws.rds_instance_info:
+        region: "{{ aws_region }}"
+        db_instance_identifier: "{{ db_instance_id }}"
+      register: rds_info
+      until: rds_info.instances[0].db_instance_status == "⑱_____________"
+      retries: 60
+      delay: 30
+
+# =====================================================================
+# PHẦN 9: LAMBDA FUNCTIONS
+# =====================================================================
+
+# TODO: Section 15 - Lambda Function Deployment
+- name: "Section 15: Deploy Lambda Function"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    function_name: ansible-hello-world
+    runtime: ①_____________                # TODO: Python runtime
+    handler: ②_____________                # TODO: Handler format
+    timeout: 3
+    memory_size: 128
+    role_name: ansible-lambda-role
+
+  tasks:
+    # TODO: Create IAM role for Lambda
+    - name: "Create Lambda IAM role"
+      amazon.aws.iam_role:
+        name: "{{ ③_____________ }}"
+        assume_role_policy_document:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: ④_____________    # TODO: AWS service
+              Action: sts:AssumeRole
+        managed_policies:
+          - arn:aws:iam::aws:policy/service-role/⑤_____________
+        state: present
+      register: ⑥_____________
+
+    # TODO: Create Lambda function
+    - name: "Create Lambda function"
+      community.aws.lambda_function:
+        name: "{{ ⑦_____________ }}"
+        region: "{{ ⑧_____________ }}"
+        state: present
+        runtime: "{{ ⑨_____________ }}"
+        handler: "{{ ⑩_____________ }}"
+        timeout: "{{ ⑪_____________ }}"
+        memory_size: "{{ ⑫_____________ }}"
+        role: "{{ lambda_role.⑬_____________ }}"
+        zip_file: /tmp/lambda_function.zip
+        environment_variables:
+          ENVIRONMENT: dev
+          LOG_LEVEL: INFO
+      register: ⑭_____________
+
+# =====================================================================
+# PHẦN 10: AUTO SCALING GROUPS
+# =====================================================================
+
+# TODO: Section 16 - Launch Template
+- name: "Section 16: Create Launch Template"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    lc_name: ansible-web-lc
+    ami_id: ami-0c7217cdde317cfec
+    instance_type: ①_____________          # TODO: Instance type
+    key_name: my-key-pair
+
+  tasks:
+    # TODO: Create launch template
+    - name: "Create launch template"
+      amazon.aws.ec2_launch_template:
+        name: "{{ ②_____________ }}"
+        region: "{{ ③_____________ }}"
+        image_id: "{{ ④_____________ }}"
+        instance_type: "{{ ⑤_____________ }}"
+        key_name: "{{ ⑥_____________ }}"
+        monitoring:
+          enabled: ⑦_____________
+        network_interfaces:
+          - device_index: 0
+            associate_public_ip_address: ⑧_____________
+        state: present
+      register: ⑨_____________
+
+# TODO: Section 17 - Auto Scaling Group
+- name: "Section 17: Create Auto Scaling Group"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    asg_name: ansible-web-asg
+    launch_template_id: lt-xxxxxxxx
+    min_size: ①_____________               # TODO: Minimum size
+    max_size: ②_____________               # TODO: Maximum size
+    desired_capacity: ③_____________       # TODO: Desired capacity
+    vpc_subnet_ids:
+      - subnet-xxxxxxxx
+      - subnet-yyyyyyyy
+
+  tasks:
+    # TODO: Create ASG
+    - name: "Create auto scaling group"
+      amazon.aws.autoscaling_group:
+        name: "{{ ④_____________ }}"
+        region: "{{ ⑤_____________ }}"
+        launch_template:
+          id: "{{ ⑥_____________ }}"
+          version: "$Latest"
+        min_size: "{{ ⑦_____________ }}"
+        max_size: "{{ ⑧_____________ }}"
+        desired_capacity: "{{ ⑨_____________ }}"
+        vpc_zone_identifier: "{{ ⑩_____________ }}"
+        health_check_period: 300
+        health_check_type: ELB
+        state: present
+      register: ⑪_____________
+
+# TODO: Section 18 - Scaling Policies
+- name: "Section 18: Create Scaling Policies"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    asg_name: ansible-web-asg
+
+  tasks:
+    # TODO: Create scale-up policy
+    - name: "Create scale-up policy"
+      amazon.aws.autoscaling_policy:
+        state: present
+        region: "{{ ①_____________ }}"
+        asg_name: "{{ ②_____________ }}"
+        name: scale-up
+        adjustment_type: ③_____________     # TODO: Adjustment type
+        scaling_adjustment: ④_____________  # TODO: Số instances
+        cooldown: 300
+
+    # TODO: Create scale-down policy
+    - name: "Create scale-down policy"
+      amazon.aws.autoscaling_policy:
+        state: present
+        region: "{{ aws_region }}"
+        asg_name: "{{ ③_____________ }}"
+        name: scale-down
+        adjustment_type: ChangeInCapacity
+        scaling_adjustment: ④_____________  # TODO: Negative number
+        cooldown: 300
+
+# =====================================================================
+# PHẦN 11: CLOUDWATCH MONITORING
+# =====================================================================
+
+# TODO: Section 19 - CloudWatch Alarms
+- name: "Section 19: Create CloudWatch Alarms"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    instance_id: i-xxxxxxxx
+
+  tasks:
+    # TODO: Create CPU alarm
+    - name: "High CPU alarm"
+      amazon.aws.cloudwatch_metric_alarm:
+        state: present
+        region: "{{ ①_____________ }}"
+        name: "high-cpu-{{ ②_____________ }}"
+        namespace: AWS/EC2
+        metric: ③_____________             # TODO: Metric name
+        statistic: ④_____________          # TODO: Statistic type
+        period: 300
+        evaluation_periods: 2
+        threshold: ⑤_____________          # TODO: Threshold value
+        comparison_operator: ⑥_____________  # TODO: Operator
+        dimensions:
+          InstanceId: "{{ instance_id }}"
+        treat_missing_data: ⑦_____________  # TODO: Missing data treatment
+
+    # TODO: Create log group
+    - name: "Create log group"
+      amazon.aws.cloudwatch_log_group:
+        state: present
+        region: "{{ ⑧_____________ }}"
+        log_group_name: /ansible/app-logs
+        retention: ⑨_____________          # TODO: Days
+        tags:
+          Application: ansible-demo
+
+# =====================================================================
+# PHẦN 12: IAM ROLES và POLICIES
+# =====================================================================
+
+# TODO: Section 20 - IAM Role
+- name: "Section 20: Create IAM Role"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    role_name: ansible-ec2-role
+
+  tasks:
+    # TODO: Create IAM role
+    - name: "Create IAM role for EC2"
+      amazon.aws.iam_role:
+        name: "{{ ①_____________ }}"
+        assume_role_policy_document:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: ②_____________    # TODO: AWS service
+              Action: ③_____________       # TODO: STS action
+        managed_policies:
+          - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+        state: present
+      register: ④_____________
+
+# TODO: Section 21 - IAM Policy
+- name: "Section 21: Create IAM Policy"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    policy_name: ansible-s3-policy
+
+  tasks:
+    # TODO: Create custom policy
+    - name: "Create S3 policy"
+      amazon.aws.iam_policy:
+        policy_name: "{{ ①_____________ }}"
+        state: present
+        policy_description: "Policy for S3 access"
+        policy:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - ②_____________           # TODO: S3 action
+                - s3:PutObject
+                - ③_____________           # TODO: List bucket action
+              Resource:
+                - arn:aws:s3:::my-app-bucket
+                - arn:aws:s3:::my-app-bucket/④_____________
+      register: ⑤_____________
+
+# =====================================================================
+# PHẦN 13: ANSIBLE VAULT
+# =====================================================================
+
+# TODO: Section 22 - Using Ansible Vault
+- name: "Section 22: Encrypted Variables"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - ①_______________                   # TODO: Encrypted file
+
+  tasks:
+    # TODO: Use encrypted password
+    - name: "Connect to database"
+      ansible.builtin.debug:
+        msg: "DB Password: {{ ②_______________ }}"
+      ③_____________: true                # TODO: Don't log sensitive data
+
+    # TODO: Use encrypted API token
+    - name: "Call API"
+      ansible.builtin.uri:
+        url: "https://api.example.com"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ ④_______________ }}"
+      ⑤_____________: true                # TODO: Don't log
+
+# =====================================================================
+# PHẦN 14: HANDLERS
+# =====================================================================
+
+# TODO: Section 23 - Handlers
+- name: "Section 23: Service Management with Handlers"
+  hosts: web_servers
+  become: ①_____________                  # TODO: Need privilege escalation
+  gather_facts: true
+
+  handlers:
+    # TODO: Define handler
+    - name: "Restart Apache"
+      ansible.builtin.②_____________:     # TODO: Module name
+        name: httpd
+        state: ③_____________             # TODO: State for restart
+
+    - name: "Reload Nginx"
+      ansible.builtin.service:
+        name: nginx
+        state: ④_____________             # TODO: State for reload
+
+  tasks:
+    # TODO: Trigger handler
+    - name: "Update Apache config"
+      ansible.builtin.copy:
+        src: /files/httpd.conf
+        dest: /etc/httpd/conf/httpd.conf
+        backup: yes
+      ⑤_____________:                     # TODO: Keyword to trigger handler
+        - Restart Apache
+
+    # TODO: Force handler execution
+    - name: "Flush handlers"
+      ansible.builtin.⑥_____________:     # TODO: Meta action
+        flush_handlers
+
+# =====================================================================
+# PHẦN 15: ERROR HANDLING
+# =====================================================================
+
+# TODO: Section 24 - Error Handling with Blocks
+- name: "Section 24: Error Handling"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    # TODO: Complete block structure
+    - name: "Task with error handling"
+      ①_____________:                     # TODO: Block keyword
+        - name: "Risky task"
+          ansible.builtin.command:
+            cmd: /bin/false
+
+        - name: "This won't run"
+          ansible.builtin.debug:
+            msg: "Skipped"
+
+      ②_____________:                     # TODO: Rescue block keyword
+        - name: "Handle error"
+          ansible.builtin.debug:
+            msg: "Error occurred"
+
+      ③_____________:                     # TODO: Always block keyword
+        - name: "Cleanup"
+          ansible.builtin.debug:
+            msg: "Always runs"
+
+# =====================================================================
+# PHẦN 16: TEMPLATES
+# =====================================================================
+
+# TODO: Section 25 - Jinja2 Templates
+- name: "Section 25: Using Templates"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    app_name: MyApp
+    app_port: 8080
+    db_host: db.example.com
+
+  tasks:
+    # TODO: Deploy template
+    - name: "Create config from template"
+      ansible.builtin.①_____________:     # TODO: Module name
+        src: /templates/app-config.②_____________  # TODO: Template extension
+        dest: /tmp/app-config.yaml
+        mode: '0644'
+      vars:
+        config_hash: "{{ ansible_date_time.epoch | string | ③____________('md5') }}"
+
+    # Template file content (app-config.j2):
+    # ---
+    # application:
+    #   name: {{ ④_____________ }}
+    #   port: {{ ⑤_____________ }}
+    #
+    # database:
+    #   host: {{ ⑥_____________ }}
+    #
+    # {% if enable_ssl %}
+    # ssl_enabled: true
+    # {% endif %}
+    #
+    # generated_at: {{ ansible_date_time.⑦_____________ }}
+
+# =====================================================================
+# PHẦN 17: PARALLEL EXECUTION
+# =====================================================================
+
+# TODO: Section 26 - Serial Execution
+- name: "Section 26: Rolling Updates"
+  hosts: all_servers
+  gather_facts: false
+
+  tasks:
+    # TODO: Serial update
+    - name: "Update packages one at a time"
+      ansible.builtin.yum:
+        name: "*"
+        state: latest
+      ①_____________: 1                   # TODO: Control batching
+
+    # TODO: Rolling update percentage
+    - name: "Rolling update"
+      ansible.builtin.systemd:
+        name: myapp
+        state: restarted
+      serial: ②_____________               # TODO: Percentage
+
+    # TODO: Async task
+    - name: "Long running task"
+      ansible.builtin.yum:
+        name: docker
+        state: present
+      async: ③_____________                # TODO: Max seconds
+      poll: ④_____________                 # TODO: Check interval
+      register: ⑤_____________
+
+    # TODO: Check async status
+    - name: "Wait for async task"
+      ansible.builtin.async_status:
+        jid: "{{ yum_result.⑥_____________ }}"
+      register: job_result
+      until: job_result.⑦_____________
+      retries: 60
+      delay: 10
+
+# =====================================================================
+# PHẦN 18: CI/CD DEPLOYMENT
+# =====================================================================
+
+# TODO: Section 27 - Complete Deployment Pipeline
+- name: "Section 27: CI/CD Pipeline"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    app_name: myapp
+    app_version: "{{ lookup('env', 'BUILD_VERSION') | default('1.0.0', true) }}"
+    environment: "{{ lookup('env', 'DEPLOY_ENV') | default('dev', true) }}"
+    aws_region: us-east-1
+
+  tasks:
+    # TODO: STAGE 1 - Build
+    - name: "STAGE 1: Build"
+      ansible.builtin.debug:
+        msg: "Building {{ ①_____________ }} version {{ ②_____________ }}"
+
+    # TODO: STAGE 2 - Test
+    - name: "STAGE 2: Run Tests"
+      ansible.builtin.command:
+        cmd: pytest tests/
+      register: ③_____________
+      ④_____________: test_results.rc != 0  # TODO: Fail condition
+
+    # TODO: STAGE 3 - Build Docker
+    - name: "STAGE 3: Build Docker image"
+      ansible.builtin.command:
+        cmd: "docker build -t {{ app_name }}:{{ ⑤_____________ }} ."
+
+    # TODO: STAGE 4 - Push to ECR
+    - name: "STAGE 4: Push to ECR"
+      community.aws.ecr_push:
+        repository: "{{ ⑥_____________ }}"
+        tag: "{{ ⑦_____________ }}"
+        region: "{{ ⑧_____________ }}"
+
+    # TODO: STAGE 5 - Update ECS
+    - name: "STAGE 5: Update ECS service"
+      community.aws.ecs_service:
+        state: present
+        region: "{{ ⑨_____________ }}"
+        cluster: "{{ ⑩_____________ }}-cluster"
+        service: "{{ ⑪_____________ }}-service"
+        task_definition: "{{ ⑫_____________ }}-{{ ⑬_____________ }}"
+        force_new_deployment: true
+        wait: true
+
+    # TODO: STAGE 6 - Smoke tests
+    - name: "STAGE 6: Smoke tests"
+      ansible.builtin.uri:
+        url: "http://{{ app_name }}.example.com/health"
+        method: GET
+        status_code: ⑭_____________         # TODO: Expected status
+      register: ⑮_____________
+      until: smoke_test.⑯_____________ == 200
+      retries: 10
+      delay: 5
+
+# =====================================================================
+# PHẦN 19: BLUE-GREEN DEPLOYMENT
+# =====================================================================
+
+# TODO: Section 28 - Blue-Green Deployment
+- name: "Section 28: Blue-Green Strategy"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    app_name: myapp
+    blue_asg: "{{ app_name }}-blue"
+    green_asg: "{{ ①_____________" }}-green  # TODO: Variable reference
+    aws_region: us-east-1
+
+  tasks:
+    # TODO: Deploy to Green
+    - name: "Deploy to Green environment"
+      amazon.aws.autoscaling_group:
+        name: "{{ ②_____________ }}"
+        region: "{{ ③_____________ }}"
+        desired_capacity: 3
+        min_size: 3
+        max_size: 5
+        launch_template:
+          id: lt-new-version
+        state: present
+
+    # TODO: Wait for Green to be healthy
+    - name: "Wait for instances"
+      ansible.builtin.pause:
+        seconds: ④_____________            # TODO: Seconds
+
+    # TODO: Switch traffic
+    - name: "Switch traffic to Green"
+      community.aws.elb_classic_lb:
+        name: production-lb
+        region: "{{ aws_region }}"
+        state: present
+        instance_ids: "{{ ⑤_____________ }}"
+
+    # TODO: Smoke tests
+    - name: "Run smoke tests"
+      ansible.builtin.uri:
+        url: http://production.example.com/health
+        status_code: ⑥_____________         # TODO: Expected code
+      register: ⑦_____________
+      until: smoke_test.⑧_____________ == 200
+      retries: 10
+      delay: 5
+
+# =====================================================================
+# PHẦN 20: NOTIFICATIONS
+# =====================================================================
+
+# TODO: Section 29 - Slack Notification
+- name: "Section 29: Send Notifications"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    slack_channel: "#ops"
+    slack_token: "{{ vault_slack_token }}"
+    app_name: myapp
+    app_version: "1.0.0"
+
+  tasks:
+    # TODO: Send Slack notification
+    - name: "Send to Slack"
+      ansible.builtin.①_____________:     # TODO: Module name
+        token: "{{ ②_____________ }}"
+        channel: "{{ ③_____________ }}"
+        msg: |
+          ✅ Deployment completed!
+          App: {{ ④_____________ }}
+          Version: {{ ⑤_____________ }}
+        username: "Ansible Deploy Bot"
+        icon_emoji: ":rocket:"
+        color: "⑥_____________"            # TODO: Color
+
+    # TODO: Send email notification
+    - name: "Send email"
+      community.aws.ses:
+        from: "ansible@mycompany.com"
+        to:
+          - ops-team@mycompany.com
+          - dev-team@mycompany.com
+        subject: "Deployment Report - {{ ⑦_____________ }}"
+        body: |
+          Deployment completed successfully!
+          Version: {{ ⑧_____________ }}
+        charset: utf-8
+
+    # TODO: Send to Microsoft Teams
+    - name: "Send to Teams"
+      ansible.builtin.uri:
+        url: "{{ teams_webhook }}"
+        method: ⑨_____________             # TODO: HTTP method
+        body_format: json
+        body:
+          "@type": "MessageCard"
+          "@context": "https://schema.org/extensions"
+          summary: "Deployment Report"
+          themeColor: "0078D7"
+          title: "Ansible Deployment"
+          text: "Deployment of {{ ⑩_____________ }} completed"
+        status_code: [201, 200]
+
+# =====================================================================
+# PHẦN 21: SECURITY HARDENING
+# =====================================================================
+
+# TODO: Section 30 - Security Hardening
+- name: "Section 30: SSH Hardening"
+  hosts: all_servers
+  become: ①_____________                  # TODO: Need root
+  gather_facts: true
+
+  handlers:
+    - name: "Restart SSH"
+      ansible.builtin.service:
+        name: sshd
+        state: ②_____________             # TODO: Restart state
+
+  tasks:
+    # TODO: Disable password authentication
+    - name: "Disable password auth"
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PasswordAuthentication'
+        line: 'PasswordAuthentication ③_____________'
+      notify: Restart SSH
+
+    # TODO: Disable root login
+    - name: "Disable root login"
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PermitRootLogin'
+        line: 'PermitRootLogin ④_____________'
+      notify: Restart SSH
+
+    # TODO: Configure firewall
+    - name: "Configure firewall"
+      ansible.builtin.firewalld:
+        service: "{{ item }}"
+        permanent: true
+        state: ⑤_____________
+      loop:
+        - http
+        - https
+        - ⑥_____________
+
+    # TODO: Install security updates
+    - name: "Install security updates"
+      ansible.builtin.yum:
+        name: "*"
+        state: latest
+        ⑦_____________: true                # TODO: Security flag
+
+# =====================================================================
+# PHẦN 22: DYNAMIC INVENTORY
+# =====================================================================
+
+# TODO: Section 31 - Create Dynamic Inventory File
+# Note: Tạo file aws_ec2.yaml với nội dung:
+#
+# %YAML 1.2
+# ---
+# plugin: ①_____________                  # TODO: AWS EC2 plugin
+# regions:
+#   - us-east-1
+#   - us-west-2
+# keyed_groups:
+#   - key: tags.Environment
+#     prefix: ②_____________
+#   - key: tags.Application
+#     prefix: app_
+# filters:
+#   instance-state-name: ③_____________
+# compose:
+#   ansible_host: ④_____________
+#   ansible_user: ec2-user
+#
+# Sau đó chạy: ansible-inventory -i aws_ec2.yaml --list
+
+# TODO: Section 32 - Use Dynamic Inventory
+- name: "Section 32: Use Dynamic Inventory"
+  hosts: ①_____________                   # TODO: Inventory pattern
+  gather_facts: true
+
+  tasks:
+    - name: "Display instance info"
+      ansible.builtin.debug:
+        msg:
+          - "Host: {{ inventory_hostname }}"
+          - "IP: {{ ansible_default_ipv4.②_____________ }}"
+          - "Tags: {{ ansible_facts.tags }}"
+
+# =====================================================================
+# PHẦN 23: ANSIBLE ROLES
+# =====================================================================
+
+# TODO: Section 33 - Role Structure
+# Tạo cấu trúc role sau:
+#
+# roles/
+# └── webapp/
+#     ├── ①_____________/                 # TODO: Tasks directory
+#     │   └── main.yml
+#     ├── ②_____________/                 # TODO: Handlers directory
+#     │   └── main.yml
+#     ├── files/
+#     │   └── config.conf
+#     ├── ③_____________/                 # TODO: Templates directory
+#     │   └── app.conf.j2
+#     ├── vars/
+#     │   └── main.yml
+#     ├── defaults/
+#     │   └── main.yml
+#     └── meta/
+#         └── main.yml
+#
+# Sau đó dùng role trong playbook:
+- name: "Section 33: Use Roles"
+  hosts: web_servers
+  become: true
+
+  roles:
+    - role: geerlingguy.apache
+      vars:
+        apache_listen_port: ④_____________
+        apache_create_vhosts: ⑤_____________
+
+    - role: ./roles/⑥_____________
+      vars:
+        app_version: 2.0.0
+
+# =====================================================================
+# PHẦN 24: ADVANCED FEATURES
+# =====================================================================
+
+# TODO: Section 34 - Multi-Region Deployment
+- name: "Section 34: Deploy to Multiple Regions"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    regions:
+      - us-east-1
+      - ①_____________
+      - eu-west-1
+    app_name: myapp
+
+  tasks:
+    # TODO: Deploy to all regions
+    - name: "Deploy across regions"
+      include_tasks: deploy-to-region.yaml
+      ②_____________: "{{ regions }}"   # TODO: Loop keyword
+      loop_control:
+        loop_var: ③_____________
+
+# TODO: Section 35 - Backup and Restore
+- name: "Section 35: Automated Backups"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    db_instance_id: myapp-db
+
+  tasks:
+    # TODO: Create RDS snapshot
+    - name: "Create snapshot"
+      community.aws.rds_instance_snapshot:
+        db_instance_identifier: "{{ ①_____________ }}"
+        snapshot_identifier: "myapp-db-{{ ansible_date_time.iso8601 | ②____________(':', '-') }}"
+        region: "{{ ③_____________ }}"
+        state: present
+
+    # TODO: Configure S3 lifecycle
+    - name: "Setup lifecycle policy"
+      amazon.aws.s3_lifecycle:
+        name: my-backup-bucket
+        region: "{{ aws_region }}"
+        state: present
+        rules:
+          - id: "Archive-old-backups"
+            prefix: "backups/"
+            status: ④_____________
+            transitions:
+              - days: 30
+                storage_class: GLACIER
+              - days: 90
+                storage_class: ⑤_____________
+
+# TODO: Section 36 - Compliance Checks
+- name: "Section 36: Security Compliance"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    # TODO: Check for unencrypted S3 buckets
+    - name: "List S3 buckets"
+      amazon.aws.s3_bucket_info:
+        region: us-east-1
+      register: ①_____________
+
+    # TODO: Alert on unencrypted buckets
+    - name: "Check encryption"
+      ansible.builtin.debug:
+        msg: "SECURITY: Bucket {{ item.name }} not encrypted!"
+      loop: "{{ all_buckets.②_____________ }}"
+      when: not item.encryption | default(false)
+
+    # TODO: Check for old EC2 instances
+    - name: "Find old instances"
+      amazon.aws.ec2_instance_info:
+        region: us-east-1
+        filters:
+          instance-state-name: ③_____________
+      register: instances
+
+# =====================================================================
+# PHẦN 25: TROUBLESHOOTING và DEBUGGING
+# =====================================================================
+
+# TODO: Section 37 - Debugging Techniques
+- name: "Section 37: Debugging Playbooks"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    debug_mode: true
+    api_endpoint: "https://api.example.com"
+
+  tasks:
+    # TODO: Verbose output
+    - name: "Debug variable"
+      ansible.builtin.debug:
+        msg: "API Endpoint: {{ ①_____________ }}"
+        ②_____________: 2                  # TODO: Verbosity level
+
+    # TODO: Conditional debug
+    - name: "Debug when enabled"
+      ansible.builtin.debug:
+        msg: "Debug mode is ON"
+      when: ③_____________
+
+    # TODO: Print all variables
+    - name: "Show all variables"
+      ansible.builtin.debug:
+        var: ④_____________
+
+    # TODO: Print specific task result
+    - name: "Run command and debug"
+      ansible.builtin.command:
+        cmd: echo "test"
+      register: ⑤_____________
+
+    - name: "Show command output"
+      ansible.builtin.debug:
+        var: ⑥_____________
+
+# TODO: Section 38 - Common Issues and Solutions
+- name: "Section 38: Error Handling Patterns"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    # TODO: Ignore errors
+    - name: "Task that might fail"
+      ansible.builtin.command:
+        cmd: /bin/true
+      ①_____________: true                # TODO: Ignore failures
+      register: result
+
+    # TODO: Check task result
+    - name: "Handle based on result"
+      ansible.builtin.debug:
+        msg: "Task succeeded"
+      when: result is ②_____________
+
+    # TODO: Retry failed task
+    - name: "Retry on failure"
+      ansible.builtin.uri:
+        url: http://example.com
+        method: GET
+      register: api_result
+      until: api_result.③_____________ == 200
+      retries: ④_____________
+      delay: ⑤_____________
+
+# =====================================================================
+# PHẦN 26: PERFORMANCE OPTIMIZATION
+# =====================================================================
+
+# TODO: Section 39 - Performance Tips
+- name: "Section 39: Optimize Playbook Performance"
+  hosts: all_servers
+  gather_facts: ①_____________            # TODO: Disable for speed
+
+  tasks:
+    # TODO: Enable pipelining
+    - name: "Use pipelining"
+      ansible.builtin.debug:
+        msg: "Add pipelining = True to ansible.cfg"
+
+    # TODO: Enable fact caching
+    - name: "Setup fact caching"
+      ansible.builtin.debug:
+        msg: "Use fact_caching = jsonfile in ansible.cfg"
+
+    # TODO: Use delegation efficiently
+    - name: "Run on specific host"
+      ansible.builtin.command:
+        cmd: docker build -t myapp .
+      delegate_to: ②_____________         # TODO: Localhost
+      run_once: ③_____________            # TODO: Run once flag
+
+# TODO: Section 40 - Resource Cleanup
+- name: "Section 40: Cleanup Old Resources"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    max_age_days: 7
+
+  tasks:
+    # TODO: Find and delete old AMIs
+    - name: "List old AMIs"
+      amazon.aws.ec2_ami_info:
+        region: "{{ ①_____________ }}"
+        filters:
+          name: "old-app-*"
+          state: available
+      register: old_amis
+
+    # TODO: Calculate age and delete
+    - name: "Delete old AMIs"
+      amazon.aws.ec2_ami:
+        image_id: "{{ item.image_id }}"
+        region: "{{ aws_region }}"
+        state: ②_____________              # TODO: Absent state
+        delete_snapshot: true
+      loop: "{{ old_amis.③_____________ }}"
+      when: item.creation_date | to_datetime('%Y-%m-%dT%H:%M:%S.%f') < (ansible_date_time.iso8601 | to_datetime | timedelta(days=-④_____________))
+
+# =====================================================================
+# PRACTICE CHECKLIST
+# =====================================================================
+#
+# Sau khi hoàn thành tất cả blanks, kiểm tra:
+#
+# PHẦN 1: Ansible Basics
+# ☐ Section 1: Basic playbook structure
+# ☐ Section 2: Variables và facts
+# ☐ Section 3: Loops và conditions
+#
+# PHẦN 2: AWS EC2
+# ☐ Section 4: EC2 key pairs
+# ☐ Section 5: EC2 instances
+#
+# PHẦN 3: Networking
+# ☐ Section 6: VPC creation
+# ☐ Section 7: Internet Gateway
+# ☐ Section 8: Subnets
+# ☐ Section 9: NAT Gateway
+# ☐ Section 10: Route Tables
+# ☐ Section 11: Security Groups
+#
+# PHẦN 4: Storage
+# ☐ Section 12: S3 bucket creation
+# ☐ Section 13: S3 file operations
+#
+# PHẦN 5: Databases
+# ☐ Section 14: RDS instances
+#
+# PHẦN 6: Compute
+# ☐ Section 15: Lambda functions
+# ☐ Section 16: Launch templates
+# ☐ Section 17: Auto Scaling Groups
+# ☐ Section 18: Scaling policies
+#
+# PHẦN 7: Monitoring
+# ☐ Section 19: CloudWatch alarms
+#
+# PHẦN 8: Security
+# ☐ Section 20: IAM roles
+# ☐ Section 21: IAM policies
+# ☐ Section 30: Security hardening
+#
+# PHẦN 9: Advanced
+# ☐ Section 22: Ansible Vault
+# ☐ Section 23: Handlers
+# ☐ Section 24: Error handling
+# ☐ Section 25: Templates
+# ☐ Section 26: Parallel execution
+#
+# PHẦN 10: CI/CD
+# ☐ Section 27: CI/CD pipeline
+# ☐ Section 28: Blue-Green deployment
+#
+# PHẦN 11: Operations
+# ☐ Section 29: Notifications
+# ☐ Section 31-32: Dynamic inventory
+# ☐ Section 33: Ansible roles
+# ☐ Section 34: Multi-region
+# ☐ Section 35: Backups
+# ☐ Section 36: Compliance
+# ☐ Section 37-38: Troubleshooting
+# ☐ Section 39-40: Performance
+#
+# =====================================================================
+# TEST YOUR KNOWLEDGE
+# =====================================================================
+#
+# Sau khi điền xong, test playbook:
+#
+# 1. Syntax check:
+#    ansible-playbook practice.yaml --syntax-check
+#
+# 2. Dry run (không thực sự chạy):
+#    ansible-playbook practice.yaml --check
+#
+# 3. List tasks:
+#    ansible-playbook practice.yaml --list-tasks
+#
+# 4. List tags:
+#    ansible-playbook practice.yaml --list-tags
+#
+# 5. Run specific section:
+#    ansible-playbook practice.yaml --tags "section1"
+#
+# 6. Run with extra vars:
+#    ansible-playbook practice.yaml -e "app_version=2.0.0"
+#
+# 7. Debug mode:
+#    ansible-playbook practice.yaml -vvv
+#
+# =====================================================================
+# END OF PRACTICE PLAYBOOK
+# =====================================================================

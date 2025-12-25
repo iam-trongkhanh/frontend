@@ -1,0 +1,1903 @@
+---
+# =====================================================================
+# ANSIBLE AWS PLAYBOOK - COMPREHENSIVE DEVOPS GUIDE
+# =====================================================================
+# Mục tiêu: Học Ansible từ cơ bản đến nâng cao cho AWS
+# Bao gồm: EC2, VPC, S3, RDS, Lambda, IAM, Security, Automation
+# =====================================================================
+
+# =====================================================================
+# PHẦN 1: ANSIBLE BASICS & CONFIGURATION
+# =====================================================================
+# Ansible sử dụng YAML format
+# Mỗi playbook bắt đầu với "---"
+# Comments bắt đầu với "#"
+
+# Section 1: Basic Playbook Structure
+# -----------------------------------
+- name: "Section 1: Basic Playbook - Hello World"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    message: "Hello Ansible on AWS!"
+
+  tasks:
+    - name: "Print message to console"
+      ansible.builtin.debug:
+        msg: "{{ message }}"
+
+    - name: "Display Ansible version"
+      ansible.builtin.debug:
+        msg: "Ansible version: {{ ansible_version.full }}"
+      when: ansible_version is defined
+
+# Section 2: Variables và Facts
+# ------------------------------
+- name: "Section 2: Variables và Facts"
+  hosts: localhost
+  connection: local
+  gather_facts: true  # Thu thập system information
+
+  vars:
+    # String variable
+    app_name: "my-app"
+
+    # Number variable
+    app_port: 8080
+
+    # Boolean variable
+    enable_ssl: true
+
+    # List variable
+    availability_zones:
+      - us-east-1a
+      - us-east-1b
+      - us-east-1c
+
+    # Dictionary variable
+    instance_config:
+      type: t3.micro
+      count: 2
+      monitoring: true
+
+    # Environment variables
+    environments:
+      dev:
+        instance_type: t3.micro
+        count: 1
+      staging:
+        instance_type: t3.small
+        count: 2
+      production:
+        instance_type: t3.medium
+        count: 3
+
+  tasks:
+    - name: "Display all variables"
+      ansible.builtin.debug:
+        msg:
+          - "App: {{ app_name }}"
+          - "Port: {{ app_port }}"
+          - "SSL: {{ enable_ssl }}"
+          - "AZs: {{ availability_zones }}"
+          - "Config: {{ instance_config }}"
+
+    - name: "Access list item"
+      ansible.builtin.debug:
+        msg: "First AZ: {{ availability_zones[0] }}"
+
+    - name: "Access dictionary value"
+      ansible.builtin.debug:
+        msg: "Instance type: {{ instance_config.type }}"
+
+    - name: "Display specific facts"
+      ansible.builtin.debug:
+        msg:
+          - "OS: {{ ansible_distribution }}"
+          - "Architecture: {{ ansible_architecture }}"
+          - "hostname: {{ ansible_hostname }}"
+
+# Section 3: Loops và Conditions
+# --------------------------------
+- name: "Section 3: Loops và Conditions"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    users:
+      - alice
+      - bob
+      - charlie
+    ports: [80, 443, 8080]
+
+  tasks:
+    - name: "Loop over list - Debug"
+      ansible.builtin.debug:
+        msg: "User: {{ item }}"
+      loop: "{{ users }}"
+
+    - name: "Loop with index"
+      ansible.builtin.debug:
+        msg: "Port {{ item.0 }} is at position {{ item.1 }}"
+      loop: "{{ ports|flatten(levels=1) }}"
+
+    - name: "Loop over dictionary"
+      ansible.builtin.debug:
+        msg: "Key: {{ item.key }}, Value: {{ item.value }}"
+      loop:
+        - { key: 'name', value: 'Alice' }
+        - { key: 'role', value: 'Admin' }
+
+    - name: "Conditional task - when"
+      ansible.builtin.debug:
+        msg: "This runs only when debug_mode is true"
+      when: debug_mode | default(false)
+      vars:
+        debug_mode: true
+
+    - name: "Multiple conditions"
+      ansible.builtin.debug:
+        msg: "All conditions met"
+      when:
+        - enable_feature | default(false)
+        - environment == "production"
+      vars:
+        enable_feature: true
+        environment: "production"
+
+    - name: "Failed when - Custom error handling"
+      ansible.builtin.debug:
+        msg: "Checking required variables"
+      failed_when: required_var is not defined
+
+# =====================================================================
+# PHẦN 2: AWS FUNDAMENTALS WITH ANSIBLE
+# =====================================================================
+
+# Section 4: AWS Connection và Authentication
+# -------------------------------------------
+- name: "Section 4: AWS Connection Setup"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  # Environment variables cho AWS credentials
+  environment:
+    AWS_ACCESS_KEY_ID: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
+    AWS_SECRET_ACCESS_KEY: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
+    AWS_SESSION_TOKEN: "{{ lookup('env', 'AWS_SESSION_TOKEN') | default('') }}"
+    AWS_DEFAULT_REGION: "{{ aws_region }}"
+
+  vars:
+    aws_region: us-east-1
+    aws_profile: default  # Sử dụng AWS profile từ ~/.aws/credentials
+
+  tasks:
+    - name: "Display AWS configuration"
+      ansible.builtin.debug:
+        msg:
+          - "Region: {{ aws_region }}"
+          - "Profile: {{ aws_profile }}"
+          - "Access Key: {{ lookup('env', 'AWS_ACCESS_KEY_ID')[:8] }}..." | default('Not set')
+
+    - name: "Example - Using AWS profile instead of env vars"
+      amazon.aws.aws_caller_info:
+        profile: "{{ aws_profile }}"
+        region: "{{ aws_region }}"
+      register: aws_info
+      ignore_errors: true
+
+    - name: "Display AWS caller info"
+      ansible.builtin.debug:
+        msg: "Account ID: {{ aws_info.account }}"
+      when: aws_info is succeeded
+
+# Section 5: EC2 Instances - Complete Management
+# -----------------------------------------------
+- name: "Section 5: EC2 Instance Management"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    instance_type: t3.micro
+    ami_id: ami-0c7217cdde317cfec  # Amazon Linux 2 (update cho region của bạn)
+    key_name: my-key-pair
+    vpc_subnet_id: subnet-xxxxxxxx
+    security_group_ids:
+      - sg-xxxxxxxx
+    instance_count: 2
+    tags:
+      Environment: dev
+      Application: webapp
+      Owner: DevOps
+
+  tasks:
+    # Tạo key pair trước
+    - name: "Create EC2 key pair"
+      amazon.aws.ec2_key:
+        name: "{{ key_name }}"
+        region: "{{ aws_region }}"
+        key_material: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+      ignore_errors: true
+
+    # Launch instances
+    - name: "Launch EC2 instances"
+      amazon.aws.ec2_instance:
+        name: "web-{{ item }}{{ ansible_date_time.epoch }}"
+        region: "{{ aws_region }}"
+        key_name: "{{ key_name }}"
+        instance_type: "{{ instance_type }}"
+        image_id: "{{ ami_id }}"
+        subnet_id: "{{ vpc_subnet_id }}"
+        security_group: "{{ security_group_ids }}"
+        network:
+          assign_public_ip: true
+        user_data: |
+          #!/bin/bash
+          yum update -y
+          yum install -y httpd
+          systemctl start httpd
+          systemctl enable httpd
+          echo "<h1>Hello from Ansible on EC2</h1>" > /var/www/html/index.html
+        tags: "{{ tags }}"
+        state: present
+        count: 1
+      loop: "{{ range(1, instance_count + 1) | list }}"
+      register: ec2_instances
+
+    - name: "Display instance IDs"
+      ansible.builtin.debug:
+        msg: "Instance {{ item.item }} created: {{ item.instance_ids[0] }}"
+      loop: "{{ ec2_instances.results }}"
+      when: item.changed
+
+    # Wait cho instances ready
+    - name: "Wait for instances to be running"
+      amazon.aws.ec2_instance_info:
+        region: "{{ aws_region }}"
+        instance_ids:
+          - "{{ item.instance_ids[0] }}"
+      register: instance_info
+      until: instance_info.instances[0].state.name == "running"
+      retries: 30
+      delay: 10
+      loop: "{{ ec2_instances.results }}"
+      when: item.changed
+
+    # Gather instance information
+    - name: "Gather EC2 instance information"
+      amazon.aws.ec2_instance_info:
+        region: "{{ aws_region }}"
+        filters:
+          "tag:Environment": "{{ tags.Environment }}"
+          instance-state-name: running
+      register: all_instances
+
+    - name: "Display all matching instances"
+      ansible.builtin.debug:
+        msg:
+          - "Instance ID: {{ item.instance_id }}"
+          - "Public IP: {{ item.public_ip_address }}"
+          - "Private IP: {{ item.private_ip_address }}"
+          - "Type: {{ item.instance_type }}"
+      loop: "{{ all_instances.instances }}"
+
+    # Stop instances (optional - comment out nếu không muốn stop)
+    - name: "Stop EC2 instances (cleanup)"
+      amazon.aws.ec2_instance:
+        region: "{{ aws_region }}"
+        instance_ids: "{{ item.instance_ids }}"
+        state: stopped
+      loop: "{{ ec2_instances.results }}"
+      when: false  # Set to true để stop instances
+      register: stopped_instances
+
+# Section 6: VPC và Networking
+# -----------------------------
+- name: "Section 6: VPC và Networking"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    vpc_cidr: 10.0.0.0/16
+    vpc_name: ansible-vpc
+    public_subnet_cidrs:
+      - 10.0.1.0/24
+      - 10.0.2.0/24
+    private_subnet_cidrs:
+      - 10.0.10.0/24
+      - 10.0.11.0/24
+    availability_zones:
+      - us-east-1a
+      - us-east-1b
+
+  tasks:
+    # Create VPC
+    - name: "Create VPC"
+      amazon.aws.ec2_vpc_net:
+        name: "{{ vpc_name }}"
+        cidr_block: "{{ vpc_cidr }}"
+        region: "{{ aws_region }}"
+        dns_hostnames: true
+        dns_support: true
+        tenancy: default
+        state: present
+      register: vpc_result
+
+    - name: "Display VPC ID"
+      ansible.builtin.debug:
+        msg: "VPC created: {{ vpc_result.vpc.id }}"
+
+    # Create Internet Gateway
+    - name: "Create Internet Gateway"
+      amazon.aws.ec2_vpc_igw:
+        vpc_id: "{{ vpc_result.vpc.id }}"
+        region: "{{ aws_region }}"
+        state: present
+      register: igw_result
+
+    # Create Public Subnets
+    - name: "Create public subnets"
+      amazon.aws.ec2_vpc_subnet:
+        vpc_id: "{{ vpc_result.vpc.id }}"
+        region: "{{ aws_region }}"
+        cidr: "{{ item.cidr }}"
+        az: "{{ item.az }}"
+        state: present
+        tags:
+          Type: public
+          Name: "public-subnet-{{ item.az }}"
+      loop:
+        - { cidr: "{{ public_subnet_cidrs[0] }}", az: "{{ availability_zones[0] }}" }
+        - { cidr: "{{ public_subnet_cidrs[1] }}", az: "{{ availability_zones[1] }}" }
+      register: public_subnets
+
+    # Create Private Subnets
+    - name: "Create private subnets"
+      amazon.aws.ec2_vpc_subnet:
+        vpc_id: "{{ vpc_result.vpc.id }}"
+        region: "{{ aws_region }}"
+        cidr: "{{ item.cidr }}"
+        az: "{{ item.az }}"
+        state: present
+        tags:
+          Type: private
+          Name: "private-subnet-{{ item.az }}"
+      loop:
+        - { cidr: "{{ private_subnet_cidrs[0] }}", az: "{{ availability_zones[0] }}" }
+        - { cidr: "{{ private_subnet_cidrs[1] }}", az: "{{ availability_zones[1] }}" }
+      register: private_subnets
+
+    # Create NAT Gateway (sau Elastic IP)
+    - name: "Allocate Elastic IP for NAT Gateway"
+      amazon.aws.ec2_eip:
+        region: "{{ aws_region }}"
+        in_vpc: true
+        state: present
+      register: eip_nat
+
+    - name: "Create NAT Gateway"
+      amazon.aws.ec2_vpc_nat_gateway:
+        region: "{{ aws_region }}"
+        subnet_id: "{{ public_subnets.results[0].subnet.id }}"
+        eip_address: "{{ eip_nat.public_ip }}"
+        state: present
+      register: nat_gateway
+      async: 600
+      poll: 0
+
+    # Create Route Tables
+    - name: "Create public route table"
+      amazon.aws.ec2_vpc_route_table:
+        vpc_id: "{{ vpc_result.vpc.id }}"
+        region: "{{ aws_region }}"
+        tags:
+          Name: public-rt
+        subnets:
+          - "{{ public_subnets.results[0].subnet.id }}"
+          - "{{ public_subnets.results[1].subnet.id }}"
+        routes:
+          - dest: 0.0.0.0/0
+            gateway_id: "{{ igw_result.gateway_id }}"
+      register: public_rt
+
+    - name: "Create private route table"
+      amazon.aws.ec2_vpc_route_table:
+        vpc_id: "{{ vpc_result.vpc.id }}"
+        region: "{{ aws_region }}"
+        tags:
+          Name: private-rt
+        subnets:
+          - "{{ private_subnets.results[0].subnet.id }}"
+          - "{{ private_subnets.results[1].subnet.id }}"
+        routes:
+          - dest: 0.0.0.0/0
+            gateway_id: "{{ nat_gateway.nat_gateway_id }}"
+      register: private_rt
+
+# Section 7: Security Groups và NACLs
+# ------------------------------------
+- name: "Section 7: Security Groups"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    vpc_id: vpc-xxxxxxxx  # Thay bằng VPC ID thực
+
+  tasks:
+    - name: "Create security group for web servers"
+      amazon.aws.ec2_security_group:
+        name: web-sg
+        description: "Security group for web servers"
+        vpc_id: "{{ vpc_id }}"
+        region: "{{ aws_region }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 80
+              - 443
+            cidr_ip: 0.0.0.0/0
+            rule_desc: "Allow HTTP/HTTPS from anywhere"
+          - proto: tcp
+            ports:
+              - 22
+            cidr_ip: 10.0.0.0/16
+            rule_desc: "Allow SSH from VPC only"
+          - proto: icmp
+            from_port: 8  # ICMP Echo Request
+            to_port: -1
+            cidr_ip: 10.0.0.0/16
+            rule_desc: "Allow ping from VPC"
+        tags:
+          Name: web-sg
+          Environment: dev
+      register: web_sg
+
+    - name: "Create security group for database"
+      amazon.aws.ec2_security_group:
+        name: db-sg
+        description: "Security group for database servers"
+        vpc_id: "{{ vpc_id }}"
+        region: "{{ aws_region }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 3306
+            group_id: "{{ web_sg.group_id }}"
+            rule_desc: "Allow MySQL from web servers"
+        tags:
+          Name: db-sg
+      register: db_sg
+
+    - name: "Display security group IDs"
+      ansible.builtin.debug:
+        msg:
+          - "Web SG: {{ web_sg.group_id }}"
+          - "DB SG: {{ db_sg.group_id }}"
+
+# =====================================================================
+# PHẦN 3: ADVANCED AWS SERVICES
+# =====================================================================
+
+# Section 8: S3 Bucket Management
+# --------------------------------
+- name: "Section 8: S3 Bucket Operations"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    bucket_name: my-ansible-bucket-unique-name
+    bucket_tags:
+      Environment: dev
+      Application: backup
+      Compliance: true
+
+  tasks:
+    # Create S3 bucket
+    - name: "Create S3 bucket"
+      amazon.aws.s3_bucket:
+        name: "{{ bucket_name }}"
+        region: "{{ aws_region }}"
+        state: present
+        tags: "{{ bucket_tags }}"
+        # Encryption
+        encryption: "AES256"
+        # Versioning
+        versioning: true
+        # Public access blocking
+        public_access:
+          BlockPublicAcls: true
+          IgnorePublicAcls: true
+          BlockPublicPolicy: true
+          RestrictPublicBuckets: true
+      register: s3_bucket
+
+    - name: "Display bucket info"
+      ansible.builtin.debug:
+        msg: "Bucket created: {{ s3_bucket.name }}"
+
+    # Create lifecycle policy
+    - name: "Configure S3 lifecycle policy"
+      amazon.aws.s3_lifecycle:
+        name: "{{ bucket_name }}"
+        region: "{{ aws_region }}"
+        expiration_days: 90
+        noncurrent_version_expiration_days: 30
+        state: present
+        rules:
+          - id: "Transition-to-IA"
+            prefix: "archive/"
+            status: enabled
+            transitions:
+              - days: 30
+                storage_class: STANDARD_IA
+              - days: 90
+                storage_class: GLACIER
+
+    # Upload files to S3
+    - name: "Upload file to S3"
+      amazon.aws.s3_object:
+        bucket: "{{ bucket_name }}"
+        region: "{{ aws_region }}"
+        object: /config/app-config.yaml
+        src: /tmp/app-config.yaml
+        mode: put
+        tags: "Environment=dev,Type=config"
+
+    # Download files from S3
+    - name: "Download file from S3"
+      amazon.aws.s3_object:
+        bucket: "{{ bucket_name }}"
+        region: "{{ aws_region }}"
+        object: /config/app-config.yaml
+        dest: /tmp/downloaded-config.yaml
+        mode: get
+
+    # Create presigned URL
+    - name: "Generate presigned URL for file sharing"
+      amazon.aws.s3_object:
+        bucket: "{{ bucket_name }}"
+        region: "{{ aws_region }}"
+        object: /public/file.txt
+        expiry: 3600  # 1 hour
+        mode: geturl
+      register: presigned_url
+
+    - name: "Display presigned URL"
+      ansible.builtin.debug:
+        msg: "URL: {{ presigned_url.url }}"
+
+    # Sync directory to S3
+    - name: "Sync local directory to S3"
+      amazon.aws.s3_sync:
+        bucket: "{{ bucket_name }}"
+        region: "{{ aws_region }}"
+        file_root: /tmp/myfiles/
+        permission: public-read
+        delete: true  # Delete files not in local directory
+
+# Section 9: RDS Database Management
+# -----------------------------------
+- name: "Section 9: RDS MySQL Database"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    db_instance_id: ansible-mysql-db
+    db_engine: mysql
+    db_engine_version: 8.0
+    db_instance_class: db.t3.micro
+    db_name: appdb
+    db_username: admin
+    db_password: "{{ vault_db_password }}"  # Từ Ansible Vault
+    db_allocated_storage: 20
+    vpc_security_group_ids:
+      - sg-xxxxxxxx
+    db_subnet_group_name: ansible-db-subnet-group
+    availability_zone: us-east-1a
+
+  tasks:
+    # Create DB subnet group trước
+    - name: "Create RDS subnet group"
+      community.aws.rds_subnet_group:
+        name: "{{ db_subnet_group_name }}"
+        region: "{{ aws_region }}"
+        description: "DB subnet group for Ansible"
+        subnets:
+          - subnet-xxxxxxxx
+          - subnet-yyyyyyyy
+        state: present
+
+    # Create RDS instance
+    - name: "Create RDS MySQL instance"
+      community.aws.rds_instance:
+        id: "{{ db_instance_id }}"
+        region: "{{ aws_region }}"
+        engine: "{{ db_engine }}"
+        engine_version: "{{ db_engine_version }}"
+        instance_class: "{{ db_instance_class }}"
+        allocated_storage: "{{ db_allocated_storage }}"
+        storage_type: gp2
+        storage_encrypted: true
+        db_name: "{{ db_name }}"
+        username: "{{ db_username }}"
+        password: "{{ db_password }}"
+        port: 3306
+        vpc_security_group_ids: "{{ vpc_security_group_ids }}"
+        db_subnet_group_name: "{{ db_subnet_group_name }}"
+        publicly_accessible: false
+        multi_az: false
+        backup_retention_period: 7
+        backup_window: "03:00-04:00"
+        maintenance_window: "Mon:04:00-Mon:05:00"
+        auto_minor_version_upgrade: true
+        deletion_protection: false
+        skip_final_snapshot: false
+        final_snapshot_identifier: "{{ db_instance_id }}-final-snapshot"
+        tags:
+          Environment: dev
+          Application: webapp
+        state: present
+      register: rds_instance
+
+    - name: "Wait for RDS instance to be available"
+      community.aws.rds_instance_info:
+        region: "{{ aws_region }}"
+        db_instance_identifier: "{{ db_instance_id }}"
+      register: rds_info
+      until: rds_info.instances[0].db_instance_status == "available"
+      retries: 60
+      delay: 30
+
+    - name: "Display RDS endpoint"
+      ansible.builtin.debug:
+        msg: "Database endpoint: {{ rds_info.instances[0].endpoint.0.address }}"
+
+    # Create read replica
+    - name: "Create read replica"
+      community.aws.rds_instance:
+        id: "{{ db_instance_id }}-replica"
+        region: "{{ aws_region }}"
+        source_db_identifier: "{{ db_instance_id }}"
+        instance_class: "{{ db_instance_class }}"
+        publicly_accessible: false
+        state: present
+      when: rds_info.instances[0].db_instance_status == "available"
+
+# Section 10: Lambda Functions
+# -----------------------------
+- name: "Section 10: Lambda Function Deployment"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    function_name: ansible-hello-world
+    function_description: "Hello World from Ansible"
+    runtime: python3.11
+    handler: index.lambda_handler
+    timeout: 3
+    memory_size: 128
+    role_name: ansible-lambda-role
+
+  tasks:
+    # Create IAM role cho Lambda
+    - name: "Create IAM role for Lambda"
+      amazon.aws.iam_role:
+        name: "{{ role_name }}"
+        assume_role_policy_document:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        managed_policies:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        state: present
+      register: lambda_role
+
+    # Tạo Lambda function code
+    - name: "Create Lambda function directory"
+      ansible.builtin.file:
+        path: /tmp/lambda_function
+        state: directory
+        mode: '0755'
+
+    - name: "Create Lambda function code"
+      ansible.builtin.copy:
+        dest: /tmp/lambda_function/index.py
+        content: |
+          import json
+
+          def lambda_handler(event, context):
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps({
+                      'message': 'Hello from Ansible!',
+                      'input': event
+                  })
+              }
+        mode: '0644'
+
+    # Create Lambda zip package
+    - name: "Create Lambda deployment package"
+      ansible.builtin.archive:
+        path: /tmp/lambda_function/
+        dest: /tmp/lambda_function.zip
+        format: zip
+
+    # Create Lambda function
+    - name: "Create Lambda function"
+      community.aws.lambda_function:
+        name: "{{ function_name }}"
+        region: "{{ aws_region }}"
+        state: present
+        runtime: "{{ runtime }}"
+        handler: "{{ handler }}"
+        timeout: "{{ timeout }}"
+        memory_size: "{{ memory_size }}"
+        role: "{{ lambda_role.arn }}"
+        zip_file: /tmp/lambda_function.zip
+        environment_variables:
+          ENVIRONMENT: dev
+          LOG_LEVEL: INFO
+        tags:
+          Application: ansible-demo
+        dead_letter_config:
+          target_arn: arn:aws:sqs:us-east-1:123456789012:dlq
+      register: lambda_function
+
+    - name: "Display Lambda function info"
+      ansible.builtin.debug:
+        msg:
+          - "Function name: {{ lambda_function.function.Name }}"
+          - "Function ARN: {{ lambda_function.function.FunctionArn }}"
+
+    # Update Lambda code
+    - name: "Update Lambda function code"
+      community.aws.lambda_layer:
+        name: "{{ function_name }}"
+        region: "{{ aws_region }}"
+        state: present
+        zip_file: /tmp/lambda_function.zip
+        operation: publish
+
+# Section 11: EC2 Auto Scaling Group
+# ------------------------------------
+- name: "Section 11: Auto Scaling Group"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    asg_name: ansible-web-asg
+    lc_name: ansible-web-lc
+    instance_type: t3.micro
+    ami_id: ami-0c7217cdde317cfec
+    key_name: my-key-pair
+    min_size: 2
+    max_size: 4
+    desired_capacity: 2
+    vpc_subnet_ids:
+      - subnet-xxxxxxxx
+      - subnet-yyyyyyyy
+    health_check_period: 300
+    health_check_type: ELB
+
+  tasks:
+    # Create Launch Template
+    - name: "Create Launch Template"
+      amazon.aws.ec2_launch_template:
+        name: "{{ lc_name }}"
+        region: "{{ aws_region }}"
+        image_id: "{{ ami_id }}"
+        instance_type: "{{ instance_type }}"
+        key_name: "{{ key_name }}"
+        instance_initiated_shutdown_behavior: terminate
+        monitoring:
+          enabled: true
+        network_interfaces:
+          - device_index: 0
+            associate_public_ip_address: true
+            delete_on_termination: true
+        tag_specifications:
+          - resource_type: instance
+            tags:
+              Environment: dev
+              Application: webapp
+        state: present
+      register: launch_template
+
+    # Create Auto Scaling Group
+    - name: "Create Auto Scaling Group"
+      amazon.aws.autoscaling_group:
+        name: "{{ asg_name }}"
+        region: "{{ aws_region }}"
+        launch_template:
+          id: "{{ launch_template.launch_template_id }}"
+          version: "$Latest"
+        min_size: "{{ min_size }}"
+        max_size: "{{ max_size }}"
+        desired_capacity: "{{ desired_capacity }}"
+        vpc_zone_identifier: "{{ vpc_subnet_ids }}"
+        health_check_period: "{{ health_check_period }}"
+        health_check_type: "{{ health_check_type }}"
+        default_cooldown: 300
+        termination_policies:
+          - OldestInstance
+          - ClosestToNextInstanceHour
+        tags:
+          - Environment: dev
+            propagate_at_launch: true
+          - Application: webapp
+            propagate_at_launch: true
+        state: present
+      register: asg
+
+    - name: "Display ASG info"
+      ansible.builtin.debug:
+        msg: "ASG created: {{ asg.name }}"
+
+    # Create scaling policies
+    - name: "Create scale-up policy"
+      amazon.aws.autoscaling_policy:
+        state: present
+        region: "{{ aws_region }}"
+        asg_name: "{{ asg_name }}"
+        name: scale-up
+        adjustment_type: ChangeInCapacity
+        scaling_adjustment: 1
+        cooldown: 300
+        metric_aggregation_type: Average
+        step_adjustments:
+          - metric_interval_lower_bound: 0
+            scaling_adjustment: 1
+      register: scale_up_policy
+
+    - name: "Create scale-down policy"
+      amazon.aws.autoscaling_policy:
+        state: present
+        region: "{{ aws_region }}"
+        asg_name: "{{ asg_name }}"
+        name: scale-down
+        adjustment_type: ChangeInCapacity
+        scaling_adjustment: -1
+        cooldown: 300
+
+# Section 12: CloudWatch Alarms và Monitoring
+# --------------------------------------------
+- name: "Section 12: CloudWatch Monitoring"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    instance_id: i-xxxxxxxx  # EC2 instance ID
+
+  tasks:
+    # Create CloudWatch alarm cho CPU
+    - name: "Create CPU utilization alarm"
+      amazon.aws.cloudwatch_metric_alarm:
+        state: present
+        region: "{{ aws_region }}"
+        name: "high-cpu-{{ instance_id }}"
+        namespace: AWS/EC2
+        metric: CPUUtilization
+        statistic: Average
+        period: 300
+        evaluation_periods: 2
+        threshold: 80.0
+        comparison_operator: GreaterThanThreshold
+        treat_missing_data: notBreaching
+        dimensions:
+          InstanceId: "{{ instance_id }}"
+        alarm_description: "Alarm when CPU > 80% for 10 minutes"
+        tags:
+          Environment: dev
+
+    # Create alarm cho disk space
+    - name: "Create disk space alarm"
+      amazon.aws.cloudwatch_metric_alarm:
+        state: present
+        region: "{{ aws_region }}"
+        name: "high-disk-{{ instance_id }}"
+        namespace: System/Linux
+        metric: DiskSpaceUtilization
+        statistic: Average
+        period: 300
+        evaluation_periods: 1
+        threshold: 85.0
+        comparison_operator: GreaterThanThreshold
+        dimensions:
+          InstanceId: "{{ instance_id }}"
+          Filesystem: /dev/xvda1
+          MountPath: /
+        alarm_description: "Alarm when disk usage > 85%"
+
+    # Create log group
+    - name: "Create CloudWatch Log Group"
+      amazon.aws.cloudwatch_log_group:
+        state: present
+        region: "{{ aws_region }}"
+        log_group_name: /ansible/app-logs
+        retention: 14  # days
+        tags:
+          Application: ansible-demo
+
+    # Create metric filter
+    - name: "Create metric filter for errors"
+      amazon.aws.cloudwatch_log_metric_filter:
+        state: present
+        region: "{{ aws_region }}"
+        log_group_name: /ansible/app-logs
+        filter_name: error-count
+        filter_pattern: "[timestamp, request_id, status_code = 5*, ...]"
+        metric_transformations:
+          - metric_name: ErrorCount
+            metric_namespace: Ansible/App
+            metric_value: 1
+
+    # Create dashboard
+    - name: "Create CloudWatch Dashboard"
+      amazon.aws.cloudwatch_dashboard:
+        state: present
+        region: "{{ aws_region }}"
+        dashboard_name: ansible-dashboard
+        dashboard_body:
+          widgets:
+            - type: metric
+              x: 0
+              y: 0
+              width: 12
+              height: 6
+              properties:
+                metrics:
+                  - [AWS/EC2, CPUUtilization, InstanceId, "{{ instance_id }}"]
+                  - [AWS/EC2, NetworkIn, InstanceId, "{{ instance_id }}"]
+                  - [AWS/EC2, NetworkOut, InstanceId, "{{ instance_id }}"]
+                period: 300
+                stat: Average
+                region: "{{ aws_region }}"
+                title: EC2 Performance
+
+# Section 13: IAM Roles và Policies
+# ----------------------------------
+- name: "Section 13: IAM Management"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    role_name: ansible-ec2-role
+    policy_name: ansible-s3-policy
+    user_name: ansible-deploy-user
+
+  tasks:
+    # Create IAM role
+    - name: "Create IAM role for EC2"
+      amazon.aws.iam_role:
+        name: "{{ role_name }}"
+        assume_role_policy_document:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: ec2.amazonaws.com
+              Action: sts:AssumeRole
+        managed_policies:
+          - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+        state: present
+      register: ec2_role
+
+    # Create custom policy
+    - name: "Create IAM policy"
+      amazon.aws.iam_policy:
+        policy_name: "{{ policy_name }}"
+        state: present
+        policy_description: "Policy for S3 access"
+        policy:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+              Resource:
+                - arn:aws:s3:::my-app-bucket
+                - arn:aws:s3:::my-app-bucket/*
+        tags:
+          Environment: dev
+      register: s3_policy
+
+    # Attach policy to role
+    - name: "Attach policy to role"
+      amazon.aws.iam_role_policy:
+        iam_role: "{{ role_name }}"
+        policy_name: "{{ policy_name }}"
+        policy_json: "{{ s3_policy.policy }}"
+        state: present
+
+    # Create IAM user
+    - name: "Create IAM user"
+      amazon.aws.iam_user:
+        name: "{{ user_name }}"
+        state: present
+        managed_policies:
+          - arn:aws:iam::aws:policy/ReadOnlyAccess
+        tags:
+          Application: ansible-deploy
+
+    # Create access key cho user
+    - name: "Create access key for user"
+      amazon.aws.iam_access_key:
+        user: "{{ user_name }}"
+        state: present
+      register: access_key
+
+    - name: "Display access key"
+      ansible.builtin.debug:
+        msg:
+          - "Access Key ID: {{ access_key.user_access_key }}"
+          - "Secret Access Key: {{ access_key.access_secret_key }}"
+      no_log: true  # Don't log sensitive data
+
+# =====================================================================
+# PHẦN 4: ADVANCED ANSIBLE FEATURES
+# =====================================================================
+
+# Section 14: Dynamic Inventory cho AWS
+# --------------------------------------
+# Note: Dynamic inventory requires separate inventory file
+# Create file: aws_ec2.yaml
+# %YAML 1.2
+# ---
+# plugin: aws_ec2
+# regions:
+#   - us-east-1
+#   - us-west-2
+# keyed_groups:
+#   - key: tags.Environment
+#     prefix: env_
+#   - key: tags.Application
+#     prefix: app_
+# filters:
+#   instance-state-name: running
+# compose:
+#   ansible_host: public_ip_address
+#   ansible_user: ec2-user
+
+- name: "Section 14: Use Dynamic Inventory"
+  hosts: tag_Environment_dev  # Tên group từ dynamic inventory
+  gather_facts: true
+
+  tasks:
+    - name: "Display all instances in dev environment"
+      ansible.builtin.debug:
+        msg:
+          - "Instance: {{ inventory_hostname }}"
+          - "Public IP: {{ ansible_default_ipv4.address }}"
+          - "Private IP: {{ ansible_default_ipv4.address }}"
+          - "Tags: {{ ansible_facts.tags }}"
+
+    - name: "Group by application"
+      ansible.builtin.debug:
+        msg: "Application: {{ ansible_facts.tags.Application }}"
+      when: ansible_facts.tags.Application is defined
+
+# Section 15: Ansible Vault - Secrets Management
+# -----------------------------------------------
+# Commands:
+# encrypt: ansible-vault encrypt secrets.yaml
+# decrypt: ansible-vault decrypt secrets.yaml
+# view: ansible-vault view secrets.yaml
+# edit: ansible-vault edit secrets.yaml
+# create: ansible-vault create secrets.yaml
+
+- name: "Section 15: Using Encrypted Variables"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - encrypted_secrets.yaml  # File đã được encrypt với ansible-vault
+
+  tasks:
+    - name: "Display encrypted database password"
+      ansible.builtin.debug:
+        msg: "DB Password: {{ db_password }}"
+      no_log: true  # Không hiển thị trong logs
+
+    - name: "Use API key from vault"
+      ansible.builtin.uri:
+        url: "https://api.example.com/endpoint"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ api_token }}"
+      no_log: true
+
+# Section 16: Handlers và Service Management
+# -------------------------------------------
+- name: "Section 16: Handlers for Service Restart"
+  hosts: web_servers
+  become: true
+  gather_facts: true
+
+  handlers:
+    - name: "Restart Apache"
+      ansible.builtin.service:
+        name: httpd
+        state: restarted
+
+    - name: "Reload Nginx"
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded
+
+    - name: "Restart application"
+      ansible.builtin.systemd:
+        name: myapp
+        state: restarted
+        daemon_reload: yes
+
+  tasks:
+    - name: "Update Apache config"
+      ansible.builtin.copy:
+        src: /files/httpd.conf
+        dest: /etc/httpd/conf/httpd.conf
+        backup: yes
+      notify:
+        - Restart Apache
+        - Restart application
+
+    - name: "Update application code"
+      ansible.builtin.git:
+        repo: https://github.com/myorg/myapp.git
+        dest: /var/www/html
+        version: main
+      notify:
+        - Restart Apache
+
+    - name: "Force handler execution"
+      ansible.builtin.meta: flush_handlers
+
+    - name: "Continue with other tasks"
+      ansible.builtin.debug:
+        msg: "Handlers have been executed"
+
+# Section 17: Blocks và Error Handling
+# --------------------------------------
+- name: "Section 17: Error Handling with Blocks"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: "Example block with error handling"
+      block:
+        - name: "Task 1 - This will run"
+          ansible.builtin.debug:
+            msg: "Running task 1"
+
+        - name: "Task 2 - This might fail"
+          ansible.builtin.command:
+            cmd: /bin/false
+          ignore_errors: false
+
+        - name: "Task 3 - This won't run if task 2 fails"
+          ansible.builtin.debug:
+            msg: "Running task 3"
+
+      rescue:
+        - name: "Rescue task - Runs on failure"
+          ansible.builtin.debug:
+            msg: "Something went wrong, running rescue"
+
+        - name: "Log error to CloudWatch"
+          amazon.aws.cloudwatch_log:
+            log_group_name: /ansible/errors
+            log_stream_name: error-log
+            message: "Task failed at {{ ansible_date_time.iso8601 }}"
+            state: present
+
+      always:
+        - name: "Always task - Runs regardless"
+          ansible.builtin.debug:
+            msg: "This always runs"
+
+# Section 18: Ansible Roles - Best Practice Structure
+# ----------------------------------------------------
+# Role structure:
+# roles/
+# └── webapp/
+#     ├── tasks/
+#     │   └── main.yml
+#     ├── handlers/
+#     │   └── main.yml
+#     ├── files/
+#     │   └── config.conf
+#     ├── templates/
+#     │   └── app.conf.j2
+#     ├── vars/
+#     │   └── main.yml
+#     ├── defaults/
+#     │   └── main.yml
+#     ├── meta/
+#     │   └── main.yml
+#     └── README.md
+
+- name: "Section 18: Using Roles"
+  hosts: web_servers
+  become: true
+
+  roles:
+    - role: geerlingguy.apache  # External role từ Ansible Galaxy
+      vars:
+        apache_listen_port: 80
+        apache_create_vhosts: true
+
+    - role: ./roles/webapp  # Local custom role
+      vars:
+        app_version: 2.0.0
+        app_port: 8080
+
+# Section 19: Templates với Jinja2
+# ---------------------------------
+- name: "Section 19: Using Jinja2 Templates"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    app_name: MyApp
+    app_port: 8080
+    db_host: db.example.com
+    db_port: 3306
+    environments:
+      - name: dev
+        replicas: 2
+      - name: staging
+        replicas: 3
+      - name: production
+        replicas: 5
+
+  tasks:
+    - name: "Create config from template"
+      ansible.builtin.template:
+        src: /templates/app-config.j2
+        dest: /tmp/app-config.yaml
+        mode: '0644'
+      vars:
+        config_hash: "{{ ansible_date_time.epoch | string | hash('md5') }}"
+
+    # Template file example (app-config.j2):
+    # ---
+    # application:
+    #   name: {{ app_name }}
+    #   port: {{ app_port }}
+    #
+    # database:
+    #   host: {{ db_host }}
+    #   port: {{ db_port }}
+    #
+    # environments:
+    # {% for env in environments %}
+    #   - name: {{ env.name }}
+    #     replicas: {{ env.replicas }}
+    # {% endfor %}
+    #
+    # generated_at: {{ ansible_date_time.iso8601 }}
+    # config_hash: {{ config_hash }}
+
+# Section 20: Parallel Execution và Async Tasks
+# ----------------------------------------------
+- name: "Section 20: Parallel Execution"
+  hosts: all_servers
+  gather_facts: false
+
+  tasks:
+    # Serial execution - 1 host at a time
+    - name: "Update packages serially"
+      ansible.builtin.yum:
+        name: "*"
+        state: latest
+      serial: 1  # Hoặc serial: "10%" hoặc serial: "2..4"
+
+    # Rolling update - 25% at a time
+    - name: "Rolling update application"
+      ansible.builtin.systemd:
+        name: myapp
+        state: restarted
+      serial: 25%
+
+    # Async task with polling
+    - name: "Long running task - async"
+      ansible.builtin.yum:
+        name: docker
+        state: present
+      async: 600  # Max 10 minutes
+      poll: 10    # Check every 10 seconds
+      register: yum_result
+
+    - name: "Check async task status"
+      ansible.builtin.async_status:
+        jid: "{{ yum_result.ansible_job_id }}"
+      register: job_result
+      until: job_result.finished
+      retries: 60
+      delay: 10
+
+# =====================================================================
+# PHẦN 5: CI/CD INTEGRATION
+# =====================================================================
+
+# Section 21: Complete CI/CD Pipeline with Ansible
+# ------------------------------------------------
+- name: "Section 21: Complete Deployment Pipeline"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    app_name: myapp
+    app_version: "{{ lookup('env', 'BUILD_VERSION') | default('1.0.0', true) }}"
+    environment: "{{ lookup('env', 'DEPLOY_ENV') | default('dev', true) }}"
+    aws_region: us-east-1
+    docker_image: "myregistry/{{ app_name }}:{{ app_version }}"
+    ecr_repository: "{{ app_name }}"
+
+  tasks:
+    # STAGE 1: Build
+    - name: "STAGE 1: Build Application"
+      ansible.builtin.debug:
+        msg: "Building {{ app_name }} version {{ app_version }}"
+
+    # STAGE 2: Test
+    - name: "STAGE 2: Run Tests"
+      ansible.builtin.command:
+        cmd: pytest tests/
+      register: test_results
+      failed_when: test_results.rc != 0
+
+    # STAGE 3: Build Docker image
+    - name: "STAGE 3: Build Docker image"
+      ansible.builtin.command:
+        cmd: "docker build -t {{ docker_image }} ."
+      delegate_to: localhost
+
+    # STAGE 4: Login to ECR
+    - name: "STAGE 4: Login to ECR"
+      ansible.builtin.command:
+        cmd: "$(aws ecr get-login --no-include-email --region {{ aws_region }})"
+      delegate_to: localhost
+
+    # STAGE 5: Push to ECR
+    - name: "STAGE 5: Push Docker image to ECR"
+      community.aws.ecr_push:
+        repository: "{{ ecr_repository }}"
+        tag: "{{ app_version }}"
+        region: "{{ aws_region }}"
+        docker_image: "{{ docker_image }}"
+
+    # STAGE 6: Update ECS service
+    - name: "STAGE 6: Update ECS service"
+      community.aws.ecs_service:
+        state: present
+        region: "{{ aws_region }}"
+        cluster: "{{ app_name }}-cluster"
+        service: "{{ app_name }}-service"
+        task_definition: "{{ app_name }}-{{ app_version }}"
+        force_new_deployment: true
+        wait: true
+      register: ecs_result
+
+    # STAGE 7: Wait for deployment
+    - name: "STAGE 7: Wait for deployment to complete"
+      community.aws.ecs_task_info:
+        region: "{{ aws_region }}"
+        cluster: "{{ app_name }}-cluster"
+        service: "{{ app_name }}-service"
+      register: ecs_tasks
+      until: ecs_tasks.tasks[0].last_status == "RUNNING"
+      retries: 30
+      delay: 10
+      when: ecs_result.changed
+
+    # STAGE 8: Smoke tests
+    - name: "STAGE 8: Run smoke tests"
+      ansible.builtin.uri:
+        url: "http://{{ app_name }}.example.com/health"
+        method: GET
+        status_code: 200
+      register: smoke_test
+      until: smoke_test.status == 200
+      retries: 10
+      delay: 5
+
+    # STAGE 9: Notify
+    - name: "STAGE 9: Send deployment notification"
+      ansible.builtin.slack:
+        token: "{{ slack_token }}"
+        msg: "Deployment of {{ app_name }} v{{ app_version }} to {{ environment }} completed successfully!"
+        channel: "#deployments"
+        username: "Ansible"
+
+    - name: "Deployment Summary"
+      ansible.builtin.debug:
+        msg:
+          - "Application: {{ app_name }}"
+          - "Version: {{ app_version }}"
+          - "Environment: {{ environment }}"
+          - "Status: SUCCESS"
+          - "Deployed at: {{ ansible_date_time.iso8601 }}"
+
+# =====================================================================
+# PHẦN 6: ADVANCED DEPLOYMENT STRATEGIES
+# =====================================================================
+
+# Section 22: Blue-Green Deployment
+# ----------------------------------
+- name: "Section 22: Blue-Green Deployment Strategy"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    app_name: myapp
+    blue_asg: "{{ app_name }}-blue"
+    green_asg: "{{ app_name }}-green"
+    production_listener: arn:aws:elasticloadbalancing:...:listener/app/prod/50dc6c495c0c9188/
+    aws_region: us-east-1
+
+  tasks:
+    - name: "Deploy new version to Green environment"
+      amazon.aws.autoscaling_group:
+        name: "{{ green_asg }}"
+        region: "{{ aws_region }}"
+        desired_capacity: 3
+        min_size: 3
+        max_size: 5
+        launch_template:
+          id: lt-new-version
+        state: present
+
+    - name: "Wait for Green instances to be healthy"
+      ansible.builtin.pause:
+        seconds: 60
+
+    - name: "Switch traffic to Green"
+      community.aws.elb_classic_lb:
+        name: production-lb
+        region: "{{ aws_region }}"
+        state: present
+        listeners:
+          - protocol: http
+            load_balancer_port: 80
+            instance_protocol: http
+            instance_port: 8080
+        instance_ids: "{{ green_instances }}"
+
+    - name: "Run smoke tests on Green"
+      ansible.builtin.uri:
+        url: http://production.example.com/health
+        status_code: 200
+      register: smoke_test
+      until: smoke_test.status == 200
+      retries: 10
+      delay: 5
+
+    - name: "Deployment successful - keep Green active"
+      ansible.builtin.debug:
+        msg: "Blue-Green deployment completed successfully"
+
+    # If smoke test fails, rollback tasks would go here
+
+# Section 23: Canary Deployment
+# -------------------------------
+- name: "Section 23: Canary Deployment"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    app_name: myapp
+    canary_percentage: 10  # Start with 10% traffic
+    aws_region: us-east-1
+
+  tasks:
+    - name: "Phase 1: Deploy Canary (10% traffic)"
+      community.aws.ecs_service:
+        region: "{{ aws_region }}"
+        cluster: "{{ app_name }}-cluster"
+        service: "{{ app_name }}-canary"
+        task_definition: "{{ app_name }}-new-version"
+        desired_count: 1
+        state: present
+
+    - name: "Wait 5 minutes for monitoring"
+      ansible.builtin.pause:
+        minutes: 5
+
+    - name: "Check error rates"
+      ansible.builtin.uri:
+        url: http://cloudwatch.amazonaws.com/metrics
+        method: GET
+        # Implementation depends on monitoring setup
+      register: error_rate
+
+    - name: "Phase 2: Increase to 50% traffic"
+      when: error_rate < 1.0
+      community.aws.ecs_service:
+        region: "{{ aws_region }}"
+        cluster: "{{ app_name }}-cluster"
+        service: "{{ app_name }}-canary"
+        desired_count: 5
+        state: present
+
+    - name: "Wait 10 minutes for monitoring"
+      ansible.builtin.pause:
+        minutes: 10
+
+    - name: "Phase 3: Full cutover to new version"
+      when: error_rate < 1.0
+      community.aws.ecs_service:
+        region: "{{ aws_region }}"
+        cluster: "{{ app_name }}-cluster"
+        service: "{{ app_name }}-main"
+        task_definition: "{{ app_name }}-new-version"
+        desired_count: 10
+        force_new_deployment: true
+        state: present
+
+# Section 24: Multi-Region Deployment
+# ------------------------------------
+- name: "Section 24: Multi-Region Active-Active"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    regions:
+      - us-east-1
+      - us-west-2
+      - eu-west-1
+    app_name: myapp
+
+  tasks:
+    - name: "Deploy to all regions"
+      include_tasks: deploy-to-region.yaml
+      loop: "{{ regions }}"
+      loop_control:
+        loop_var: target_region
+
+    - name: "Update Route53 latency-based routing"
+      amazon.aws.route53:
+        state: present
+        zone: example.com
+        record: myapp.example.com
+        type: A
+        value: "{{ item.elb_dns }}"
+        alias: true
+        alias_hosted_zone_id: "{{ item.elb_zone_id }}"
+        identifier: "{{ item.region }}"
+        routing_policy: latency
+      loop:
+        - { region: us-east-1, elb_dns: "us-east-1-lb.elb.amazonaws.com", elb_zone_id: "Z35SXDOTRKT7Z3" }
+        - { region: us-west-2, elb_dns: "us-west-2-lb.elb.amazonaws.com", elb_zone_id: "Z33NWJLP7R7JZN" }
+        - { region: eu-west-1, elb_dns: "eu-west-1-lb.elb.amazonaws.com", elb_zone_id: "Z215JYRZR1TBD5" }
+
+# =====================================================================
+# PHẦN 7: MAINTENANCE AND OPERATIONS
+# =====================================================================
+
+# Section 25: Backup và Restore Operations
+# -----------------------------------------
+- name: "Section 25: Automated Backups"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    backup_bucket: my-app-backups
+    backup_retention_days: 30
+
+  tasks:
+    - name: "Create RDS snapshot"
+      community.aws.rds_instance_snapshot:
+        db_instance_identifier: myapp-db
+        snapshot_identifier: "myapp-db-{{ ansible_date_time.iso8601 | replace(':', '-') }}"
+        region: "{{ aws_region }}"
+        state: present
+
+    - name: "Backup S3 data to glacier"
+      amazon.aws.s3_object:
+        bucket: "{{ backup_bucket }}"
+        region: "{{ aws_region }}"
+        object: "/backups/{{ ansible_date_time.date }}/"
+        mode: list
+      register: s3_backup
+
+    - name: "Copy old backups to Glacier"
+      amazon.aws.s3_lifecycle:
+        name: "{{ backup_bucket }}"
+        region: "{{ aws_region }}"
+        state: present
+        rules:
+          - id: "Transition-to-Glacier"
+            prefix: "backups/"
+            status: enabled
+            transitions:
+              - days: 30
+                storage_class: GLACIER
+              - days: 90
+                storage_class: DEEP_ARCHIVE
+
+# Section 26: Cleanup và Resource Management
+# --------------------------------------------
+- name: "Section 26: Cleanup Old Resources"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: us-east-1
+    resource_age_days: 7
+
+  tasks:
+    - name: "Find old AMIs"
+      amazon.aws.ec2_ami_info:
+        region: "{{ aws_region }}"
+        filters:
+          name: "old-app-*"
+          state: available
+      register: old_amis
+
+    - name: "Deregister old AMIs"
+      amazon.aws.ec2_ami:
+        image_id: "{{ item.image_id }}"
+        region: "{{ aws_region }}"
+        state: absent
+        delete_snapshot: true
+      loop: "{{ old_amis.images }}"
+      when: item.creation_date | (ansible_date_time.iso8601 | replace('T', ' ') | regex_replace('Z$', '')) | int > (ansible_date_time.epoch - (resource_age_days * 86400))
+
+    - name: "Delete old CloudWatch log streams"
+      amazon.aws.cloudwatch_log_info:
+        region: "{{ aws_region }}"
+        log_group_name: /ansible/app-logs
+      register: log_streams
+
+# =====================================================================
+# PHẦN 8: SECURITY AND COMPLIANCE
+# =====================================================================
+
+# Section 27: Security Hardening Playbook
+# ----------------------------------------
+- name: "Section 27: Security Hardening"
+  hosts: all_servers
+  become: true
+  gather_facts: true
+
+  vars:
+    ssh_password_auth: false
+    ssh_root_login: false
+    ssh_max_auth_tries: 3
+
+  tasks:
+    - name: "Disable password authentication"
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+      notify: Restart SSH
+
+    - name: "Disable root login"
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PermitRootLogin'
+        line: 'PermitRootLogin no'
+      notify: Restart SSH
+
+    - name: "Set maximum authentication attempts"
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^MaxAuthTries'
+        line: 'MaxAuthTries {{ ssh_max_auth_tries }}'
+      notify: Restart SSH
+
+    - name: "Configure firewall rules"
+      ansible.builtin.firewalld:
+        service: "{{ item }}"
+        permanent: true
+        state: enabled
+      loop:
+        - http
+        - https
+        - ssh
+
+    - name: "Install security updates"
+      ansible.builtin.yum:
+        name: "*"
+        state: latest
+        security: true
+
+  handlers:
+    - name: "Restart SSH"
+      ansible.builtin.service:
+        name: sshd
+        state: restarted
+
+# Section 28: Compliance Checks
+# -------------------------------
+- name: "Section 28: AWS Compliance Scanning"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: "Check for unencrypted S3 buckets"
+      amazon.aws.s3_bucket_info:
+        region: us-east-1
+      register: all_buckets
+
+    - name: "Report unencrypted buckets"
+      ansible.builtin.debug:
+        msg: "Bucket {{ item.name }} is not encrypted"
+      loop: "{{ all_buckets.buckets }}"
+      when: not item.encryption | default(false)
+
+    - name: "Check for public S3 buckets"
+      amazon.aws.s3_bucket_info:
+        region: us-east-1
+      register: public_buckets
+
+    - name: "Alert on public buckets"
+      ansible.builtin.debug:
+        msg: "SECURITY ALERT: Bucket {{ item.name }} is public!"
+      loop: "{{ public_buckets.buckets }}"
+      when: item.policy | default('') | search('Principal": "*"')
+
+    - name: "Check EC2 instances with outdated AMIs"
+      amazon.aws.ec2_instance_info:
+        region: us-east-1
+        filters:
+          instance-state-name: running
+      register: ec2_instances
+
+# =====================================================================
+# PHẦN 9: NOTIFICATIONS AND REPORTING
+# =====================================================================
+
+# Section 29: Notifications
+# --------------------------
+- name: "Section 29: Deployment Notifications"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    slack_channel: "#ops"
+    slack_token: "{{ vault_slack_token }}"
+
+  tasks:
+    - name: "Send Slack notification on success"
+      ansible.builtin.slack:
+        token: "{{ slack_token }}"
+        channel: "{{ slack_channel }}"
+        msg: |
+          ✅ Deployment completed successfully!
+          App: {{ app_name }}
+          Version: {{ app_version }}
+          Environment: {{ environment }}
+          Duration: {{ ansible_date_time.iso8601 }}
+        username: "Ansible Deploy Bot"
+        icon_emoji: ":rocket:"
+        color: "good"
+
+    - name: "Send email notification"
+      community.aws.ses:
+        from: "ansible@mycompany.com"
+        to: "{{ recipients }}"
+        subject: "Ansible Deployment Report - {{ app_name }}"
+        body: |
+          Deployment Summary
+          ==================
+          Application: {{ app_name }}
+          Version: {{ app_version }}
+          Status: SUCCESS
+          Timestamp: {{ ansible_date_time.iso8601 }}
+        charset: utf-8
+      vars:
+        recipients:
+          - ops-team@mycompany.com
+          - dev-team@mycompany.com
+
+    - name: "Send to Microsoft Teams"
+      ansible.builtin.uri:
+        url: "{{ teams_webhook }}"
+        method: POST
+        body_format: json
+        body:
+          "@type": "MessageCard"
+          "@context": "https://schema.org/extensions"
+          summary: "Deployment Report"
+          themeColor: "0078D7"
+          title: "Ansible Deployment"
+          text: "Deployment of {{ app_name }} v{{ app_version }} completed"
+        status_code: [201, 200]
+
+# =====================================================================
+# PHẦN 10: ANSIBLE TOWER/AWX INTEGRATION
+# =====================================================================
+
+# Section 30: Ansible Tower Workflow
+# -----------------------------------
+# This is an example of how to structure playbooks for Tower/AWX
+# Tower features:
+# - Job templates
+# - Workflows
+# - Surveys/parameters
+# - Credentials (integrated with Vault)
+# - Scheduling
+# - RBAC
+# - REST API
+
+# Tower Workflow Example (visual in Tower UI):
+# 1. Setup Infrastructure → 2. Configure Databases → 3. Deploy App → 4. Run Tests → 5. Cleanup
+
+- name: "Section 30: Tower-Ready Playbook"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # Tower will inject these extra_vars
+    tower_job_id: "{{ tower_job_id | default('manual-run', true) }}"
+    tower_user_name: "{{ tower_user_name | default('admin', true) }}"
+
+  tasks:
+    - name: "Add Tower job info to logs"
+      ansible.builtin.debug:
+        msg: "Running Tower job {{ tower_job_id }} as {{ tower_user_name }}"
+
+    - name: "Send Tower callback on success"
+      ansible.builtin.uri:
+        url: "https://tower.example.com/api/v2/jobs/{{ tower_job_id }}/callback/"
+        method: POST
+        body_format: json
+        body:
+          host_config_key: "{{ callback_key }}"
+        status_code: [200, 201]
+      when: tower_job_id != "manual-run"
+
+# =====================================================================
+# END OF COMPREHENSIVE ANSIBLE AWS PLAYBOOK
+# =====================================================================
+# Tổng kết: 30 Sections covering:
+# - Ansible basics (variables, loops, conditions, handlers)
+# - AWS services (EC2, VPC, S3, RDS, Lambda, ASG, CloudWatch, IAM)
+# - Advanced features (Vault, Roles, Templates, Dynamic Inventory)
+# - CI/CD (Blue-Green, Canary, Multi-region)
+# - Operations (Backup, Cleanup, Monitoring)
+# - Security (Hardening, Compliance)
+# - Notifications (Slack, Email, Teams)
+# - Tower/AWX integration
+# =====================================================================

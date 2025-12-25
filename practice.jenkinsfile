@@ -1,0 +1,846 @@
+// =============================================================================
+// PRACTICE JENKINSFILE - COMPREHENSIVE FILL IN THE BLANKS
+// =============================================================================
+// Hãy điền vào các chỗ trống (________) để hoàn thành Jenkinsfile
+// Gợi ý: Xem learn.jenkinsfile để tìm câu trả lời
+// =============================================================================
+
+________ {                                        // <-- TODO: Khai báo pipeline
+    // -------------------------------------------------------------------------
+    // AGENT
+    // -------------------------------------------------------------------------
+    agent ________                                // <-- TODO: Chạy trên bất kỳ agent nào
+
+    // -------------------------------------------------------------------------
+    // OPTIONS
+    // -------------------------------------------------------------------------
+    options {
+        timeout(time: 1, unit: '________')        // <-- TODO: HOURS
+        timestamps()
+        disableConcurrentBuilds()
+        skipDefaultCheckout(________)              // <-- TODO: true
+        buildDiscarder(logRotator(numToKeepStr: '________'))  // <-- TODO: 10 builds
+    }
+
+    // -------------------------------------------------------------------------
+    // PARAMETERS
+    // -------------------------------------------------------------------------
+    parameters {
+        string(
+            name: 'VERSION',
+            defaultValue: '1.0.0',
+            description: 'Release version',
+            trim: ________                           // <-- TODO: true
+        )
+
+        ________(                                   // <-- TODO: Choice parameter
+            name: 'ENVIRONMENT',
+            choices: ['dev', 'staging', '________'],  // <-- TODO: production
+            description: 'Deployment environment'
+        )
+
+        booleanParam(
+            name: 'RUN_TESTS',
+            defaultValue: true,
+            description: 'Run tests'
+        )
+
+        booleanParam(
+            name: 'FORCE_DEPLOY',
+            defaultValue: ________,                // <-- TODO: false
+            description: 'Force deploy'
+        )
+
+        text(
+            name: 'RELEASE_NOTES',
+            defaultValue: '',
+            description: 'Release notes'
+        )
+
+        password(
+            name: 'API_TOKEN',
+            defaultValue: '',
+            description: 'API token (masked)'
+        )
+    }
+
+    // -------------------------------------------------------------------------
+    // TRIGGERS (OPTIONAL)
+    // -------------------------------------------------------------------------
+    // Uncomment và điền trigger:
+    // triggers {
+    //     pollSCM('H/5 * * * *')               // <-- TODO: Poll every 5 minutes
+    //     cron('0 2 * * *')                    // <-- TODO: Every day at 2 AM
+    //     upstream(upstreamProjects: '________', threshold: 'SUCCESS')  // <-- TODO: dependency job
+    // }
+
+    // -------------------------------------------------------------------------
+    // ENVIRONMENT
+    // -------------------------------------------------------------------------
+    environment {
+        PROJECT_NAME = 'my-application'
+        NODE_ENV = '________'                      // <-- TODO: production
+        BUILD_TIMESTAMP = sh(script: 'date -u +"%Y%m%d_%H%M%S"', returnStdout: true).trim()
+        DEPLOY_ENV = "${params.________}"          // <-- TODO: ENVIRONMENT
+
+        // Paths
+        WORKSPACE_ROOT = "${env.________}"          // <-- TODO: WORKSPACE
+        BUILD_DIR = "${env.WORKSPACE}/build"
+        REPORTS_DIR = "${env.WORKSPACE}/________"   // <-- TODO: reports
+
+        // Git info (dynamic)
+        GIT_COMMIT_SHORT = ''
+        GIT_BRANCH_NAME = ''
+    }
+
+    // -------------------------------------------------------------------------
+    // TOOLS
+    // -------------------------------------------------------------------------
+    tools {
+        // maven 'Maven-3.9'
+        // nodejs '________'                        // <-- TODO: Node-20
+        // jdk 'JDK-17'
+    }
+
+    // -------------------------------------------------------------------------
+    // LIBRARIES
+    // -------------------------------------------------------------------------
+    // @Library('shared-lib@________') _          // <-- TODO: main branch
+
+    // -------------------------------------------------------------------------
+    // STAGES
+    // -------------------------------------------------------------------------
+    ________ {                                     // <-- TODO: stages block
+        // ======================================================================
+        // STAGE 1: INITIALIZATION
+        // ======================================================================
+        stage('Initialization') {
+            steps {
+                script {
+                    echo '=================================='
+                    echo '  PIPELINE INITIALIZATION'
+                    echo '=================================='
+                    echo "Project: ${env.PROJECT_NAME}"
+                    echo "Environment: ${params.ENVIRONMENT}"
+                    echo "Version: ${params.________}"      // <-- TODO: VERSION
+                    echo "Build Number: ${env.BUILD_NUMBER}"
+                    echo "Build URL: ${env.________}"        // <-- TODO: BUILD_URL
+                    echo "=================================="
+
+                    // Set Git info dynamically
+                    env.GIT_COMMIT_SHORT = sh(
+                        script: 'git rev-parse --short ________',  // <-- TODO: HEAD
+                        returnStdout: true
+                    ).trim()
+
+                    env.GIT_BRANCH_NAME = sh(
+                        script: 'git rev-parse --abbrev-ref ________',  // <-- TODO: HEAD
+                        returnStdout: true
+                    ).trim()
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 2: CHECKOUT
+        // ======================================================================
+        stage('Checkout') {
+            steps {
+                echo 'Checking out source code...'
+                checkout scm
+
+                sh '''
+                    echo "=== Git Info ==="
+                    git log -1 --pretty=format:"Commit: %h%nAuthor: %an%nMessage: %s%n"
+                    git branch -a
+                    echo "==============="
+                '''
+            }
+        }
+
+        // ======================================================================
+        // STAGE 3: SETUP
+        // ======================================================================
+        stage('Setup') {
+            steps {
+                echo 'Setting up build environment...'
+
+                script {
+                    sh '''
+                        mkdir -p ${REPORTS_DIR}
+                        mkdir -p ${BUILD_DIR}
+                        mkdir -p coverage
+                        mkdir -p artifacts
+                    '''
+
+                    sh '''
+                        echo "=== Tool Versions ==="
+                        node --version 2>/dev/null || echo "Node.js not found"
+                        npm --version 2>/dev/null || echo "npm not found"
+                        python3 --version 2>/dev/null || echo "Python not found"
+                        docker --version 2>/dev/null || echo "Docker not found"
+                        echo "===================="
+                    '''
+                }
+            }
+
+            post {
+                success {
+                    echo 'Setup completed successfully'
+                }
+                failure {
+                    echo 'Setup ________'                  // <-- TODO: failed
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 4: INSTALL DEPENDENCIES
+        // ======================================================================
+        stage('Install Dependencies') {
+            steps {
+                echo 'Installing dependencies...'
+
+                sh '''
+                    # Node.js project
+                    if [ -f package-lock.json ]; then
+                        echo "Installing with npm ci..."
+                        npm ci --no-fund --no-audit --prefer-offline
+                    elif [ -f package.json ]; then
+                        echo "Installing with npm install..."
+                        npm install --no-fund --no-audit
+                    else
+                        echo "No package.json ________"        // <-- TODO: found
+                    fi
+
+                    # Python project
+                    if [ -f requirements.txt ]; then
+                        echo "Installing Python dependencies..."
+                        pip3 install -r requirements.txt --quiet
+                    fi
+                '''
+            }
+        }
+
+        // ======================================================================
+        // STAGE 5: CODE QUALITY (PARALLEL)
+        // ======================================================================
+        stage('Code Quality') {
+            ________ {                                  // <-- TODO: parallel block
+                stage('Lint') {
+                    steps {
+                        echo 'Running linters...'
+
+                        sh '''
+                            # ESLint
+                            if command -v eslint &> /dev/null; then
+                                eslint . --format json --output-file ${REPORTS_DIR}/eslint-report.json || true
+                            fi
+
+                            # Pylint
+                            if command -v pylint &> /dev/null; then
+                                pylint src/ --output-format=text:${REPORTS_DIR}/pylint-report.txt || true
+                            fi
+                        '''
+                    }
+
+                    post {
+                        always {
+                            archiveArtifacts artifacts: 'reports/eslint-report.json', allowEmptyArchive: true
+                            archiveArtifacts artifacts: 'reports/pylint-report.txt', allowEmptyArchive: true
+                        }
+                    }
+                }
+
+                stage('Format Check') {
+                    steps {
+                        echo 'Checking code format...'
+
+                        sh '''
+                            # Prettier
+                            if command -v prettier &> /dev/null; then
+                                prettier --list-different "src/**/*.{js,jsx,ts,tsx}" || true
+                            fi
+
+                            # Black for Python
+                            if command -v black &> /dev/null; then
+                                black --check src/ || true
+                            fi
+                        '''
+                    }
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 6: UNIT TESTS
+        // ======================================================================
+        stage('Unit Tests') {
+            when {
+                expression { params.________ == true }  // <-- TODO: RUN_TESTS
+            }
+
+            steps {
+                echo 'Running unit tests...'
+
+                sh '''
+                    # Jest
+                    if npm run | grep -q "test"; then
+                        npm run test -- --coverage --ci --reporters=default --reporters=jest-junit || true
+                    fi
+
+                    # Pytest
+                    if command -v pytest &> /dev/null; then
+                        pytest --junitxml=${REPORTS_DIR}/pytest-report.xml || true
+                    fi
+                '''
+            }
+
+            post {
+                always {
+                    junit 'test-results/*.xml' || junit 'reports/junit.xml'
+                    // publishCoverage adapters: [coberturaAdapter('coverage/cobertura.xml')]
+                }
+
+                failure {
+                    script {
+                        if (params.FORCE_DEPLOY) {
+                            echo 'Tests failed but FORCE_DEPLOY is enabled'
+                        } else {
+                            error('Unit tests failed!')
+                        }
+                    }
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 7: BUILD
+        // ======================================================================
+        stage('Build') {
+            steps {
+                echo 'Building application...'
+
+                script {
+                    if (fileExists('package.json')) {
+                        echo 'Building Node.js application...'
+
+                        // Next.js
+                        if (fileExists('next.config.js')) {
+                            sh 'npm run ________'         // <-- TODO: build
+                        }
+                        // React/Vue
+                        else if (fileExists('src/App.jsx')) {
+                            sh 'npm run build'
+                        }
+                        else {
+                            sh 'npm run build || echo "No build script"'
+                        }
+                    }
+                }
+            }
+
+            post {
+                success {
+                    echo 'Build completed successfully'
+                    archiveArtifacts artifacts: 'dist/**/*', allowEmptyArchive: true
+                    archiveArtifacts artifacts: 'build/**/*', allowEmptyArchive: true
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 8: SECURITY SCANNING (PARALLEL)
+        // ======================================================================
+        stage('Security Scanning') {
+            parallel {
+                stage('SAST') {
+                    steps {
+                        echo 'Running SAST...'
+
+                        script {
+                            try {
+                                withSonarQubeEnv('SonarQube-Server') {
+                                    sh '''
+                                        sonar-scanner \
+                                            -Dsonar.projectKey=${PROJECT_NAME} \
+                                            -Dsonar.sources=src \
+                                            -Dsonar.host.url=$SONAR_HOST_URL \
+                                            -Dsonar.login=$SONAR_AUTH_TOKEN
+                                    '''
+                                }
+                            } catch (Exception e) {
+                                echo "SonarQube scan failed: ${e}"
+                            }
+                        }
+                    }
+                }
+
+                stage('SCA') {
+                    steps {
+                        echo 'Running SCA...'
+
+                        sh '''
+                            # OWASP Dependency-Check
+                            if command -v dependency-check &> /dev/null; then
+                                dependency-check \
+                                    --format "HTML" \
+                                    --format "XML" \
+                                    --project "${PROJECT_NAME}" \
+                                    --out ${REPORTS_DIR}/dependency-check \
+                                    --scan . || true
+                            fi
+
+                            # Trivy
+                            if command -v trivy &> /dev/null; then
+                                trivy fs \
+                                    --format json \
+                                    --output ${REPORTS_DIR}/trivy-report.json \
+                                    --severity HIGH,________ \  // <-- TODO: CRITICAL
+                                    . || true
+                            fi
+
+                            # Snyk
+                            if command -v snyk &> /dev/null; then
+                                snyk test --json > ${REPORTS_DIR}/snyk-report.json || true
+                            fi
+                        '''
+                    }
+
+                    post {
+                        always {
+                            publishHTML([
+                                reportDir: 'reports/dependency-check',
+                                reportFiles: 'dependency-check-report.html',
+                                reportName: 'Dependency Check Report',
+                                allowMissing: true
+                            ])
+                        }
+                    }
+                }
+
+                stage('Secrets Scan') {
+                    steps {
+                        echo 'Scanning for secrets...'
+
+                        sh '''
+                            # Gitleaks
+                            if command -v gitleaks &> /dev/null; then
+                                gitleaks detect --source . --report-path ${REPORTS_DIR}/gitleaks-report.json || true
+                            fi
+
+                            # Trivy config scan
+                            if command -v trivy &> /dev/null; then
+                                trivy config \
+                                    --format json \
+                                    --output ${REPORTS_DIR}/trivy-config-report.json \
+                                    . || true
+                            fi
+                        '''
+                    }
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 9: QUALITY GATE
+        // ======================================================================
+        stage('Quality Gate') {
+            steps {
+                echo 'Checking quality gate...'
+
+                script {
+                    timeout(time: 10, unit: 'MINUTES') {
+                        waitForQualityGate(abortPipeline: ________)  // <-- TODO: false
+                    }
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 10: DOCKER BUILD
+        // ======================================================================
+        stage('Docker Build') {
+            when {
+                expression { fileExists('________') }    // <-- TODO: Dockerfile
+            }
+
+            steps {
+                echo 'Building Docker image...'
+
+                script {
+                    def imageName = "${env.PROJECT_NAME}"
+                    def imageTag = "${params.VERSION}-${env.BUILD_TIMESTAMP}"
+                    def fullImage = "${imageName}:${imageTag}"
+
+                    echo "Building: ${fullImage}"
+
+                    docker.build(fullImage,
+                        "--build-arg VERSION=${params.VERSION} " +
+                        "--build-arg BUILD_DATE=${env.BUILD_TIMESTAMP} " +
+                        "--build-arg GIT_COMMIT=${env.GIT_COMMIT_SHORT}"
+                    )
+
+                    docker.image(fullImage).tag("${imageName}:________")  // <-- TODO: latest
+                    docker.image(fullImage).tag("${imageName}:${params.VERSION}")
+
+                    env.DOCKER_IMAGE_NAME = imageName
+                    env.DOCKER_IMAGE_TAG = imageTag
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 11: DOCKER PUSH
+        // ======================================================================
+        stage('Docker Push') {
+            when {
+                beforeAgent true
+                expression { fileExists('Dockerfile') }
+            }
+
+            steps {
+                echo 'Pushing Docker image...'
+
+                script {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'docker-registry-credentials',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )]) {
+                        sh """
+                            echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
+                        """
+                    }
+
+                    sh """
+                        docker push ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}
+                        docker push ${env.DOCKER_IMAGE_NAME}:latest
+                        docker push ${env.DOCKER_IMAGE_NAME}:${params.VERSION}
+                    """
+
+                    sh 'docker ________'                    // <-- TODO: logout
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 12: IMAGE SCAN
+        // ======================================================================
+        stage('Image Scan') {
+            when {
+                beforeAgent true
+                expression { fileExists('Dockerfile') }
+            }
+
+            steps {
+                echo 'Scanning Docker image...'
+
+                sh '''
+                    trivy image \
+                        --format json \
+                        --output ${REPORTS_DIR}/trivy-image-report.json \
+                        --severity HIGH,CRITICAL \
+                        ${PROJECT_NAME}:${DOCKER_IMAGE_TAG} || true
+                '''
+            }
+
+            post {
+                always {
+                    archiveArtifacts artifacts: 'reports/trivy-image-report.json', allowEmptyArchive: true
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 13: DEPLOY TO DEV
+        // ======================================================================
+        stage('Deploy to Dev') {
+            when {
+                expression { params.ENVIRONMENT == '________' || params.ENVIRONMENT == 'staging' }  // <-- TODO: dev
+            }
+
+            steps {
+                echo "Deploying to ${params.ENVIRONMENT}..."
+
+                script {
+                    // Kubernetes deployment
+                    // withKubeConfig([
+                    //     credentialsId: 'k8s-dev-credentials',
+                    //     serverUrl: 'https://k8s-dev-cluster:________'  // <-- TODO: 6443
+                    // ]) {
+                    //     sh """
+                    //         kubectl set image deployment/${PROJECT_NAME} \
+                    //             ${PROJECT_NAME}=${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} \
+                    //             --namespace=dev
+                    //         kubectl rollout status deployment/${PROJECT_NAME} --namespace=dev
+                    //     """
+                    // }
+
+                    echo "Deployment completed!"
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 14: INTEGRATION TESTS
+        // ======================================================================
+        stage('Integration Tests') {
+            when {
+                expression { params.RUN_TESTS == ________ }  // <-- TODO: true
+            }
+
+            steps {
+                echo 'Running integration tests...'
+
+                sh '''
+                    if npm run | grep -q "test:integration"; then
+                        npm run test:integration || true
+                    fi
+                '''
+            }
+
+            post {
+                always {
+                    junit 'test-results/integration/*.xml' || echo 'No integration test results'
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 15: DEPLOY TO STAGING/PRODUCTION
+        // ======================================================================
+        stage('Deploy to Production') {
+            when {
+                expression { params.ENVIRONMENT == 'staging' || params.ENVIRONMENT == 'production' }
+            }
+
+            steps {
+                script {
+                    if (params.ENVIRONMENT == 'production') {
+                        input message: 'Deploy to PRODUCTION?', ok: 'Deploy'
+
+                        input(
+                            message: 'CONFIRM: Deploy to production?',
+                            ok: 'Yes, deploy to ________',       // <-- TODO: production
+                            submitter: 'admin,devops-lead',
+                            submitterParameter: 'APPROVER'
+                        )
+
+                        env.DEPLOY_APPROVER = env.________      // <-- TODO: APPROVER
+                    }
+
+                    echo "Deploying to ${params.ENVIRONMENT}..."
+                    echo "Approved by: ${env.DEPLOY_APPROVER ?: 'N/A'}"
+
+                    echo "Deployment completed!"
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 16: SMOKE TESTS
+        // ======================================================================
+        stage('Smoke Tests') {
+            steps {
+                echo 'Running smoke tests...'
+
+                script {
+                    sleep(time: 10, unit: 'SECONDS')
+
+                    def healthCheckUrl = "https://app-${params.ENVIRONMENT}.example.com/api/________"  // <-- TODO: health
+
+                    echo "Checking: ${healthCheckUrl}"
+
+                    sh """
+                        curl -f ${healthCheckUrl} || exit 1
+                    """
+                }
+            }
+
+            post {
+                failure {
+                    echo 'Smoke tests failed! Rolling back...'
+                    // sh 'kubectl rollout undo deployment/${PROJECT_NAME}'
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 17: PERFORMANCE TESTS
+        // ======================================================================
+        stage('Performance Tests') {
+            when {
+                expression { params.ENVIRONMENT == '________' }  // <-- TODO: staging
+            }
+
+            steps {
+                echo 'Running performance tests...'
+
+                sh '''
+                    if command -v k6 &> /dev/null; then
+                        k6 run --out json=${REPORTS_DIR}/k6-report.json tests/performance/load-test.js || true
+                    fi
+
+                    if command -v jmeter &> /dev/null; then
+                        jmeter -n -t tests/performance/test-plan.jmx -l ${REPORTS_DIR}/jmeter-results.jtl || true
+                    fi
+                '''
+            }
+
+            post {
+                always {
+                    archiveArtifacts artifacts: 'reports/k6-report.json', allowEmptyArchive: true
+                    archiveArtifacts artifacts: 'reports/jmeter-results.jtl', allowEmptyArchive: true
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 18: CLEANUP
+        // ======================================================================
+        stage('Cleanup') {
+            steps {
+                echo 'Performing cleanup...'
+
+                script {
+                    sh '''
+                        docker image prune -f
+                        ls -t ${BUILD_DIR}/*.tar 2>/dev/null | tail -n +6 | xargs -r rm || true
+                    '''
+                }
+            }
+        }
+
+        // ======================================================================
+        // STAGE 19: NOTIFICATIONS
+        // ======================================================================
+        stage('Notify') {
+            steps {
+                echo 'Sending notifications...'
+
+                script {
+                    def buildStatus = currentBuild.result ?: 'SUCCESS'
+                    def buildColor = buildStatus == 'SUCCESS' ? 'good' : '________'  // <-- TODO: danger
+
+                    // Slack notification
+                    slackSend(
+                        channel: '#deployments',
+                        color: buildColor,
+                        message: """
+                            ${env.PROJECT_NAME} - ${buildStatus}
+                            Environment: ${params.ENVIRONMENT}
+                            Version: ${params.VERSION}
+                            Build: ${env.BUILD_URL}
+                        """.stripIndent()
+                    )
+
+                    // Email notification
+                    emailext(
+                        subject: "[${buildStatus}] ${env.PROJECT_NAME} - ${params.ENVIRONMENT}",
+                        body: """
+                            <h2>Build ${buildStatus}</h2>
+                            <p><strong>Project:</strong> ${env.PROJECT_NAME}</p>
+                            <p><strong>Environment:</strong> ${params.ENVIRONMENT}</p>
+                            <p><strong>Version:</strong> ${params.VERSION}</p>
+                            <p><strong>Build:</strong> <a href="${env.BUILD_URL}">#${env.BUILD_NUMBER}</a></p>
+                        """.stripIndent(),
+                        to: 'team@example.com',
+                        mimeType: 'text/html'
+                    )
+
+                    echo 'Notifications sent!'
+                }
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // POST BUILD ACTIONS
+    // -------------------------------------------------------------------------
+    post {
+        always {
+            echo '=================================='
+            echo '  PIPELINE COMPLETED'
+            echo '=================================='
+            echo "Status: ${currentBuild.result ?: '________'}"  // <-- TODO: SUCCESS
+            echo "Duration: ${currentBuild.durationString}"
+            echo '=================================='
+
+            archiveArtifacts artifacts: 'build/**/*', allowEmptyArchive: true
+            archiveArtifacts artifacts: 'dist/**/*', allowEmptyArchive: true
+            archiveArtifacts artifacts: 'reports/**/*', allowEmptyArchive: true
+
+            junit 'test-results/**/*.xml' || echo 'No test results'
+
+            cleanWs(
+                deleteDirs: ________,                // <-- TODO: true
+                disableDeferredWipeout: true,
+                notFailBuild: true
+            )
+        }
+
+        success {
+            echo '✅ Pipeline completed successfully!'
+        }
+
+        failure {
+            echo '❌ Pipeline failed!'
+        }
+
+        unstable {
+            echo '⚠️ Pipeline is unstable'
+        }
+
+        aborted {
+            echo '⏸️ Pipeline was aborted'
+        }
+
+        cleanup {
+            echo 'Performing final cleanup...'
+        }
+    }
+}
+
+// =============================================================================
+// CHECKLIST - ĐÁNH DẤU X KHI HOÀN THÀNH
+// =============================================================================
+// [ ] Pipeline declaration
+// [ ] Agent configuration
+// [ ] Options (timeout, timestamps, buildDiscarder, etc.)
+// [ ] Parameters (string, choice, boolean, text, password)
+// [ ] Triggers (pollSCM, cron, upstream)
+// [ ] Environment variables
+// [ ] Tools configuration
+// [ ] Libraries
+// [ ] Stages block
+// [ ] Stage 1: Initialization
+// [ ] Stage 2: Checkout
+// [ ] Stage 3: Setup
+// [ ] Stage 4: Install Dependencies
+// [ ] Stage 5: Code Quality (parallel lint + format check)
+// [ ] Stage 6: Unit Tests (with conditional)
+// [ ] Stage 7: Build
+// [ ] Stage 8: Security Scanning (parallel SAST + SCA + Secrets)
+// [ ] Stage 9: Quality Gate
+// [ ] Stage 10: Docker Build
+// [ ] Stage 11: Docker Push
+// [ ] Stage 12: Image Scan
+// [ ] Stage 13: Deploy to Dev
+// [ ] Stage 14: Integration Tests
+// [ ] Stage 15: Deploy to Staging/Production (with approval)
+// [ ] Stage 16: Smoke Tests
+// [ ] Stage 17: Performance Tests
+// [ ] Stage 18: Cleanup
+// [ ] Stage 19: Notifications (Slack + Email)
+// [ ] Post build actions (always, success, failure, unstable, aborted, cleanup)
+// =============================================================================
+
+// =============================================================================
+// CÁCH KIỂM TRA:
+// =============================================================================
+// 1. Copy vào Jenkins project của bạn
+// 2. Vào Jenkins → Pipeline Syntax → Validate
+// 3. Hoặc sử dụng Jenkins Pipeline Linter
+// 4. Run pipeline để test
+// =============================================================================
